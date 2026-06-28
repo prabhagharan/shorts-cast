@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Platform floor: `.macOS(.v13)` (chosen now so later capture plans can add ScreenCaptureKit to the same package graph).
+- Platform floor: `.macOS(.v12)` (the core engine uses only Foundation/CoreGraphics, so it builds and its tests RUN on the macOS 12 dev machine and every newer macOS. The later Capture plan raises this to `.v13` when it adds ScreenCaptureKit).
 - Swift tools version: `5.7` (matches the installed toolchain, Swift 5.7.2 / Xcode 14.2).
 - No dependencies on AppKit, ScreenCaptureKit, AVFoundation, or Metal in this package — pure logic only.
 - All time values are `Seconds` (`typealias Seconds = Double`), relative to recording start.
@@ -55,7 +55,7 @@ import PackageDescription
 
 let package = Package(
     name: "ShortsCastCore",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v12)],
     products: [
         .library(name: "ShortsCastCore", targets: ["ShortsCastCore"])
     ],
