@@ -53,4 +53,13 @@ final class EventClustererTests: XCTestCase {
         XCTAssertEqual(segs.count, 1)
         XCTAssertEqual(segs[0].zoom, min(s.defaultZoom + s.denseZoomBonus, s.maxZoom), accuracy: 1e-6)
     }
+
+    func test_keyOnlyCluster_isDropped() {
+        let log = EventLog(duration: 10, screenSize: CGSize(width: 1920, height: 1080), events: [
+            .key(t: 1.0),
+            .key(t: 1.2),
+            .key(t: 1.4)
+        ])
+        XCTAssertTrue(clusterer().segments(from: log).isEmpty)
+    }
 }
