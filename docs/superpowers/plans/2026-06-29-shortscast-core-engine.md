@@ -881,7 +881,9 @@ public struct AutoDirector {
 
             let nextStart = i + 1 < segments.count ? segments[i + 1].start : Double.infinity
             let gap = nextStart - seg.end
-            if gap > settings.inactivityTimeout {
+            // Only return to resting when there is room to complete the zoom-out
+            // before the next segment begins; otherwise stay zoomed and pan.
+            if gap > settings.inactivityTimeout + settings.zoomOutDuration {
                 push(seg.end + settings.inactivityTimeout, target)    // hold, then
                 push(seg.end + settings.inactivityTimeout + settings.zoomOutDuration, rest) // zoom out
             }
