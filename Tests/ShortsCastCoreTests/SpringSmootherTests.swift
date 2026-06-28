@@ -26,4 +26,15 @@ final class SpringSmootherTests: XCTestCase {
     func test_emptyInput_returnsEmpty() {
         XCTAssertTrue(SpringSmoother().smooth([]).isEmpty)
     }
+
+    func test_stableAtLowSampleRate() {
+        // 30 Hz step input diverged with the old single-step integrator.
+        var samples: [TimedPoint] = [TimedPoint(t: 0, p: .zero)]
+        var t = 0.0
+        for _ in 0..<90 { t += 1.0/30.0; samples.append(TimedPoint(t: t, p: CGPoint(x: 100, y: 0))) }
+        let out = SpringSmoother(frequency: 6).smooth(samples)
+        let maxX = out.map { abs(Double($0.p.x)) }.max() ?? 0
+        XCTAssertLessThan(maxX, 150)                              // bounded, does not diverge
+        XCTAssertEqual(Double(out.last!.p.x), 100, accuracy: 1.0) // converged to target
+    }
 }
