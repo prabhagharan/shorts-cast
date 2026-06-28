@@ -6,12 +6,12 @@
 
 **Architecture:** A standalone Swift Package with no AppKit/ScreenCaptureKit/AVFoundation dependency. Input is an `EventLog` (raw recording metadata) plus settings; output is an editable `CameraPath` and `CursorTrack`. Everything is a pure function of its inputs so the same recording always produces the same result, which makes the whole module unit-testable without capture or UI. Later plans (capture, compositor, editor) consume this library.
 
-**Tech Stack:** Swift 5.9+, Swift Package Manager, XCTest, Foundation + CoreGraphics (for `CGPoint`/`CGRect`/`CGSize`).
+**Tech Stack:** Swift 5.7 (Xcode 14.2 toolchain), Swift Package Manager, XCTest, Foundation + CoreGraphics (for `CGPoint`/`CGRect`/`CGSize`).
 
 ## Global Constraints
 
 - Platform floor: `.macOS(.v13)` (chosen now so later capture plans can add ScreenCaptureKit to the same package graph).
-- Swift tools version: `5.9`.
+- Swift tools version: `5.7` (matches the installed toolchain, Swift 5.7.2 / Xcode 14.2).
 - No dependencies on AppKit, ScreenCaptureKit, AVFoundation, or Metal in this package — pure logic only.
 - All time values are `Seconds` (`typealias Seconds = Double`), relative to recording start.
 - All screen coordinates are in **pixels, origin top-left**, matching ScreenCaptureKit's frame space.
@@ -50,7 +50,7 @@ final class ScaffoldTests: XCTestCase {
 
 ```swift
 // Package.swift
-// swift-tools-version:5.9
+// swift-tools-version:5.7
 import PackageDescription
 
 let package = Package(
