@@ -44,4 +44,30 @@ final class AutoDirectorTests: XCTestCase {
         XCTAssertEqual(path.sample(at: 4).scale, 1.0, accuracy: 1e-6)
         XCTAssertEqual(path.sample(at: 8).center.x, screen.width / 2, accuracy: 1e-6)
     }
+
+    func test_closeSegments_stayZoomedBetween() {
+        let s = AutoDirectorSettings()
+        let segs = [
+            FocusSegment(start: 1.0, end: 1.5, center: CGPoint(x: 200, y: 200), zoom: 2.5),
+            FocusSegment(start: 2.0, end: 2.5, center: CGPoint(x: 800, y: 400), zoom: 2.5)
+        ]
+        // gap = 0.5, well under inactivityTimeout, so the camera holds zoom between them.
+        let path = AutoDirector(settings: s).cameraPath(segments: segs, duration: 5, screenSize: screen)
+        XCTAssertGreaterThan(path.sample(at: 1.75).scale, s.restingZoom)
+    }
+
+    func test_gapWithinZoomOutWindow_staysZoomed() {
+        let s = AutoDirectorSettings() // inactivityTimeout 1.5, zoomOutDuration 0.6
+        let segs = [
+            FocusSegment(start: 1.0, end: 2.0, center: CGPoint(x: 200, y: 200), zoom: 2.5),
+            FocusSegment(start: 3.8, end: 4.2, center: CGPoint(x: 900, y: 500), zoom: 2.5)
+        ]
+        // gap = 1.8: exceeds inactivityTimeout (1.5) but is less than 1.5+0.6=2.1,
+        // so there is not room to fully zoom out first — the camera stays zoomed.
+        let path = AutoDirector(settings: s).cameraPath(segments: segs, duration: 6, screenSize: screen)
+        XCTAssertGreaterThan(path.sample(at: 3.0).scale, s.restingZoom)
+        for i in 1..<path.keyframes.count {
+            XCTAssertGreaterThan(path.keyframes[i].t, path.keyframes[i-1].t)
+        }
+    }
 }
