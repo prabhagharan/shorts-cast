@@ -38,25 +38,29 @@ public enum VideoExporter {
         writer.add(writerInput)
 
         let compositor = FrameCompositor(style: style, format: format, screenSize: screenSize)
+        let director = Director(settings: AutoDirectorSettings())
 
         reader.startReading()
         writer.startWriting()
         writer.startSession(atSourceTime: .zero)
+
+        guard let pixelBufferPool = adaptor.pixelBufferPool else {
+            throw ExportError.writerFailed(writer.error)
+        }
 
         var rendered = 0
         while let sample = readerOutput.copyNextSampleBuffer() {
             guard let imageBuffer = CMSampleBufferGetImageBuffer(sample) else { continue }
             let pts = CMSampleBufferGetPresentationTimeStamp(sample)
             let t = CMTimeGetSeconds(pts)
-            let crop = Director(settings: AutoDirectorSettings())
-                .cropRect(result, at: t, format: format, screen: screenSize)
+            let crop = director.cropRect(result, at: t, format: format, screen: screenSize)
             let ciSource = CIImage(cvPixelBuffer: imageBuffer)
             let composedImage = compositor.composite(source: ciSource, crop: crop, time: t,
                                                       cursor: result.cursor)
 
             while !writerInput.isReadyForMoreMediaData { usleep(1000) }
             var outBuffer: CVPixelBuffer?
-            CVPixelBufferPoolCreatePixelBuffer(nil, adaptor.pixelBufferPool!, &outBuffer)
+            CVPixelBufferPoolCreatePixelBuffer(nil, pixelBufferPool, &outBuffer)
             guard let pb = outBuffer else { continue }
             compositor.context.render(composedImage, to: pb)
             adaptor.append(pb, withPresentationTime: pts)
@@ -68,7 +72,13 @@ public enum VideoExporter {
         writer.finishWriting { sema.signal() }
         sema.wait()
 
-        if writer.status == .failed { throw ExportError.writerFailed(writer.error) }
-        if rendered == 0 { throw ExportError.noFramesRendered }
+        if writer.status == .failed {
+            try? FileManager.default.removeItem(at: outURL)
+            throw ExportError.writerFailed(writer.error)
+        }
+        if rendered == 0 {
+            try? FileManager.default.removeItem(at: outURL)
+            throw ExportError.noFramesRendered
+        }
     }
 }
