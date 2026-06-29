@@ -60,9 +60,15 @@ public final class ScreenCaptureSession: NSObject, SCStreamOutput {
             sampleQueue.async { cont.resume() }
         }
         let end = machNowSeconds()
-        input?.markAsFinished()
-        if let w = writer { await w.finishWriting() }
-        writerError = writer?.error
+        // Finalize only if the writer actually started (a frame arrived). Calling
+        // markAsFinished()/finishWriting() while status is .unknown throws.
+        if let w = writer, w.status == .writing {
+            input?.markAsFinished()
+            await w.finishWriting()
+            writerError = w.error
+        } else {
+            writerError = writer?.error
+        }
         return (firstFramePTSSeconds ?? end, end)
     }
 
