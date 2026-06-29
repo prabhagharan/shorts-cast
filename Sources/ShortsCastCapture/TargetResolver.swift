@@ -89,7 +89,6 @@ public enum TargetResolver {
 
         // FULL DISPLAY
         let cfg = config(pixelWidth: Int(dRect.width * s), pixelHeight: Int(dRect.height * s))
-        FileHandle.standardError.write(Data("diag(resolve): displays=\(content.displays.count) chosenID=\(display.displayID) frame=\(dRect) scale=\(s) config=\(cfg.width)x\(cfg.height) minFrameInterval=\(cfg.minimumFrameInterval.value)/\(cfg.minimumFrameInterval.timescale)\n".utf8))
         return ResolvedTarget(kind: "display", displayID: display.displayID,
                               captureRectPoints: dRect, scale: s, cropPixels: nil,
                               filter: filter, configuration: cfg)

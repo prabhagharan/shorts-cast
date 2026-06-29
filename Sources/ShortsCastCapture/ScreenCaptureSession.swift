@@ -24,10 +24,6 @@ public final class ScreenCaptureSession: NSObject, SCStreamOutput, SCStreamDeleg
     public private(set) var firstFramePTSSeconds: Double?
     public private(set) var writerError: Error?
 
-    private var diagCallbacks = 0
-    private var diagScreenType = 0
-    private var diagWithImage = 0
-
     public init(outputURL: URL, pixelSize: CGSize, cropRectPixels: CGRect?) {
         self.outputURL = outputURL
         self.pixelSize = pixelSize
@@ -51,7 +47,6 @@ public final class ScreenCaptureSession: NSObject, SCStreamOutput, SCStreamDeleg
 
     public func start(filter: SCContentFilter, configuration: SCStreamConfiguration) async throws {
         try makeWriter()
-        FileHandle.standardError.write(Data("diag(start): writer ready, adding output + starting stream\n".utf8))
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             DispatchQueue.main.async {
                 do {
@@ -67,7 +62,6 @@ public final class ScreenCaptureSession: NSObject, SCStreamOutput, SCStreamDeleg
                 }
             }
         }
-        FileHandle.standardError.write(Data("diag(start): startCapture returned; config=\(configuration.width)x\(configuration.height) queueDepth=\(configuration.queueDepth)\n".utf8))
     }
 
     public func stop() async -> (firstFrameT: Double, endT: Double) {
@@ -89,24 +83,19 @@ public final class ScreenCaptureSession: NSObject, SCStreamOutput, SCStreamDeleg
         } else {
             writerError = writer?.error
         }
-        FileHandle.standardError.write(Data("diag: callbacks=\(diagCallbacks) screenType=\(diagScreenType) withImage=\(diagWithImage) firstFramePTS=\(String(describing: firstFramePTSSeconds)) writerStatus=\(writer?.status.rawValue ?? -1)\n".utf8))
         return (firstFramePTSSeconds ?? end, end)
     }
 
     public func stream(_ stream: SCStream, didStopWithError error: Error) {
-        FileHandle.standardError.write(Data("diag: stream stopped with error: \(error)\n".utf8))
+        if writerError == nil { writerError = error }
     }
 
     public func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
                        of type: SCStreamOutputType) {
-        diagCallbacks += 1
-        guard type == .screen else { return }
-        diagScreenType += 1
-        guard sampleBuffer.isValid,
+        guard type == .screen, sampleBuffer.isValid,
               let writer = writer, let input = input, let adaptor = adaptor,
               CMSampleBufferGetNumSamples(sampleBuffer) > 0,
               let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        diagWithImage += 1
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
 
         if writer.status == .unknown {
