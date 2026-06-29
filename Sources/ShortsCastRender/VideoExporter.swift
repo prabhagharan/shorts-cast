@@ -8,7 +8,7 @@ import CoreGraphics
 import ShortsCastCore
 
 public enum VideoExporter {
-    public enum ExportError: Error { case noVideoTrack, noFramesRendered, writerFailed(Error?) }
+    public enum ExportError: Error { case noVideoTrack, noFramesRendered, writerFailed(Error?), readerFailed(Error?) }
 
     public static func export(rawVideoURL: URL, result: DirectorResult, format: OutputFormat,
                               style: RenderStyle, screenSize: CGSize, to outURL: URL) throws {
@@ -58,13 +58,23 @@ public enum VideoExporter {
             let composedImage = compositor.composite(source: ciSource, crop: crop, time: t,
                                                       cursor: result.cursor)
 
-            while !writerInput.isReadyForMoreMediaData { usleep(1000) }
+            while !writerInput.isReadyForMoreMediaData {
+                if writer.status == .failed { break }
+                usleep(1000)
+            }
+            if writer.status == .failed { break }
             var outBuffer: CVPixelBuffer?
             CVPixelBufferPoolCreatePixelBuffer(nil, pixelBufferPool, &outBuffer)
             guard let pb = outBuffer else { continue }
             compositor.context.render(composedImage, to: pb)
-            adaptor.append(pb, withPresentationTime: pts)
+            if !adaptor.append(pb, withPresentationTime: pts) { break }
             rendered += 1
+        }
+
+        if reader.status == .failed {
+            writer.cancelWriting()
+            try? FileManager.default.removeItem(at: outURL)
+            throw ExportError.readerFailed(reader.error)
         }
 
         writerInput.markAsFinished()
