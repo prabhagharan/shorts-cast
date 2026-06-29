@@ -35,7 +35,9 @@ guard status.allGranted else {
 
 let createdISO = ISO8601DateFormatter().string(from: Date())
 
-let sema = DispatchSemaphore(value: 0)
+// ScreenCaptureKit needs a live main run loop to deliver frames, so we must NOT
+// block the main thread. Run the recording on a Task and keep the main run loop
+// alive with CFRunLoopRun(); the Task calls exit() when done.
 Task {
     // The top-level #available guard does not propagate into this async closure.
     guard #available(macOS 12.3, *) else { exit(1) }
@@ -55,10 +57,10 @@ Task {
                 .direct(log: result.eventLog, overrides: [])
             print("Director: \(dr.segments.count) segments, \(dr.cameraPath.keyframes.count) keyframes")
         }
-        sema.signal()
+        exit(0)
     } catch {
         FileHandle.standardError.write(Data("Recording failed: \(error)\n".utf8))
         exit(2)
     }
 }
-sema.wait()
+CFRunLoopRun()
