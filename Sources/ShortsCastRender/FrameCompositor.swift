@@ -16,6 +16,8 @@ public final class FrameCompositor {
     private let background: CIImage
     private let roundedMask: CIImage
     private let shadow: CIImage
+    private let cursorDot: CIImage
+    private let ringUnit: CIImage
 
     public init(style: RenderStyle, format: OutputFormat, screenSize: CGSize) {
         self.style = style
@@ -30,6 +32,8 @@ public final class FrameCompositor {
         self.roundedMask = FrameCompositor.makeRoundedMask(size: contentRect.size, radius: style.cornerRadius)
         self.shadow = FrameCompositor.makeShadow(maskSize: contentRect.size, radius: style.cornerRadius,
                                                  contentOrigin: contentRect.origin, style: style)
+        self.cursorDot = FrameCompositor.makeFilledCircle(radius: style.cursorRadius, color: style.cursorColor)
+        self.ringUnit = FrameCompositor.makeRing(radius: 100, thickness: 12, color: style.cursorColor)
     }
 
     public func composite(source: CIImage, crop: CGRect, time: Seconds, cursor: CursorTrack) -> CIImage {
@@ -51,11 +55,32 @@ public final class FrameCompositor {
             "inputMaskImage": mask
         ])
 
-        let out = rounded
-            .composited(over: shadow)
-            .composited(over: background)
-        // cursor overlay added in Task 6
-        return out.cropped(to: CGRect(origin: .zero, size: exportSize))
+        var layered = rounded.composited(over: shadow).composited(over: background)
+
+        // Click ripples (under the cursor dot).
+        for r in CursorRenderer.activeRipples(at: time, clicks: cursor.clicks, duration: style.rippleDuration) {
+            guard let p = sourceToExport(r.point, crop: crop) else { continue }
+            let radius = style.cursorRadius + (style.rippleMaxRadius - style.cursorRadius) * CGFloat(r.progress)
+            let scale = radius / 100.0 // ringUnit was built at radius 100
+            let alpha = CGFloat(1.0 - r.progress)
+            let ring = ringUnit
+                .applyingFilter("CIColorMatrix", parameters: [
+                    "inputAVector": CIVector(x: 0, y: 0, z: 0, w: alpha)
+                ])
+                .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+                .transformed(by: CGAffineTransform(translationX: p.x - radius, y: p.y - radius))
+            layered = ring.composited(over: layered)
+        }
+
+        // Cursor dot.
+        if let cp = CursorRenderer.position(at: time, samples: cursor.samples),
+           let p = sourceToExport(cp, crop: crop) {
+            let dot = cursorDot.transformed(by: CGAffineTransform(translationX: p.x - style.cursorRadius,
+                                                                  y: p.y - style.cursorRadius))
+            layered = dot.composited(over: layered)
+        }
+
+        return layered.cropped(to: CGRect(origin: .zero, size: exportSize))
     }
 
     // MARK: - Precomputed layers
@@ -88,6 +113,45 @@ public final class FrameCompositor {
                           cornerWidth: r, cornerHeight: r, transform: nil)
         ctx.addPath(path); ctx.fillPath()
         return CIImage(cgImage: ctx.makeImage()!)
+    }
+
+    /// A filled circle CIImage centered at (radius, radius), size 2*radius square.
+    static func makeFilledCircle(radius: CGFloat, color: RGBA) -> CIImage {
+        let d = max(2, Int((radius * 2).rounded()))
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let ctx = CGContext(data: nil, width: d, height: d, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.clear(CGRect(x: 0, y: 0, width: d, height: d))
+        ctx.setFillColor(CGColor(red: CGFloat(color.r), green: CGFloat(color.g),
+                                 blue: CGFloat(color.b), alpha: CGFloat(color.a)))
+        ctx.fillEllipse(in: CGRect(x: 0, y: 0, width: d, height: d))
+        return CIImage(cgImage: ctx.makeImage()!)
+    }
+
+    /// A ring (stroked circle) CIImage of outer `radius`, centered, size 2*radius square.
+    static func makeRing(radius: CGFloat, thickness: CGFloat, color: RGBA) -> CIImage {
+        let d = max(2, Int((radius * 2).rounded()))
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let ctx = CGContext(data: nil, width: d, height: d, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.clear(CGRect(x: 0, y: 0, width: d, height: d))
+        ctx.setStrokeColor(CGColor(red: CGFloat(color.r), green: CGFloat(color.g),
+                                   blue: CGFloat(color.b), alpha: CGFloat(color.a)))
+        ctx.setLineWidth(thickness)
+        let inset = thickness / 2
+        ctx.strokeEllipse(in: CGRect(x: inset, y: inset, width: CGFloat(d) - 2 * inset,
+                                     height: CGFloat(d) - 2 * inset))
+        return CIImage(cgImage: ctx.makeImage()!)
+    }
+
+    /// Maps a source-pixel (top-left) point into export CI space (bottom-left), or nil if outside the crop.
+    func sourceToExport(_ point: CGPoint, crop: CGRect) -> CGPoint? {
+        guard crop.contains(point) else { return nil }
+        let ciY = screenSize.height - point.y                 // to source CI space
+        let ciCropY = screenSize.height - crop.maxY
+        let localX = (point.x - crop.minX) * (contentRect.width / crop.width)
+        let localY = (ciY - ciCropY) * (contentRect.height / crop.height)
+        return CGPoint(x: contentRect.minX + localX, y: contentRect.minY + localY)
     }
 
     /// A soft drop shadow placed under the content rect.
