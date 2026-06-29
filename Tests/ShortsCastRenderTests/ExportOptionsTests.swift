@@ -30,4 +30,28 @@ final class ExportOptionsTests: XCTestCase {
             XCTAssertEqual(err as? ExportParseError, .unknownFormat("bogus"))
         }
     }
+
+    func test_parse_secondPositional_throws() {
+        XCTAssertThrowsError(try ExportOptions.parse(["a", "b", "--format", "9:16", "--out", "d"])) { err in
+            XCTAssertEqual(err as? ExportParseError, .badValue("b"))
+        }
+    }
+
+    func test_parse_unknownFlag_throws() {
+        XCTAssertThrowsError(try ExportOptions.parse(["clip", "--bogus", "--format", "9:16", "--out", "d"])) { err in
+            XCTAssertEqual(err as? ExportParseError, .badValue("--bogus"))
+        }
+    }
+
+    func test_parse_missingFormatValue_throws() {
+        XCTAssertThrowsError(try ExportOptions.parse(["clip", "--out", "d", "--format"])) { err in
+            XCTAssertEqual(err as? ExportParseError, .badValue("--format"))
+        }
+    }
+
+    func test_parse_formatAbsent_throws() {
+        XCTAssertThrowsError(try ExportOptions.parse(["clip", "--out", "d"])) { err in
+            XCTAssertEqual(err as? ExportParseError, .missingRequired("--format"))
+        }
+    }
 }
