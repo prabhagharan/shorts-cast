@@ -51,10 +51,12 @@ public final class ScreenCaptureSession: NSObject, SCStreamOutput, SCStreamDeleg
 
     public func start(filter: SCContentFilter, configuration: SCStreamConfiguration) async throws {
         try makeWriter()
+        FileHandle.standardError.write(Data("diag(start): writer ready, adding output + starting stream\n".utf8))
         let s = SCStream(filter: filter, configuration: configuration, delegate: self)
         try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
         stream = s
         try await s.startCapture()
+        FileHandle.standardError.write(Data("diag(start): startCapture returned; config=\(configuration.width)x\(configuration.height) queueDepth=\(configuration.queueDepth)\n".utf8))
     }
 
     public func stop() async -> (firstFrameT: Double, endT: Double) {
