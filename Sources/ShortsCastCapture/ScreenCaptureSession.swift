@@ -8,7 +8,7 @@ import ScreenCaptureKit
 import CoreGraphics
 
 @available(macOS 12.3, *)
-public final class ScreenCaptureSession: NSObject, SCStreamOutput {
+public final class ScreenCaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
     public enum CaptureError: Error { case writerSetupFailed }
 
     private let outputURL: URL
@@ -23,6 +23,10 @@ public final class ScreenCaptureSession: NSObject, SCStreamOutput {
     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
     public private(set) var firstFramePTSSeconds: Double?
     public private(set) var writerError: Error?
+
+    private var diagCallbacks = 0
+    private var diagScreenType = 0
+    private var diagWithImage = 0
 
     public init(outputURL: URL, pixelSize: CGSize, cropRectPixels: CGRect?) {
         self.outputURL = outputURL
@@ -47,7 +51,7 @@ public final class ScreenCaptureSession: NSObject, SCStreamOutput {
 
     public func start(filter: SCContentFilter, configuration: SCStreamConfiguration) async throws {
         try makeWriter()
-        let s = SCStream(filter: filter, configuration: configuration, delegate: nil)
+        let s = SCStream(filter: filter, configuration: configuration, delegate: self)
         try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
         stream = s
         try await s.startCapture()
@@ -69,15 +73,24 @@ public final class ScreenCaptureSession: NSObject, SCStreamOutput {
         } else {
             writerError = writer?.error
         }
+        FileHandle.standardError.write(Data("diag: callbacks=\(diagCallbacks) screenType=\(diagScreenType) withImage=\(diagWithImage) firstFramePTS=\(String(describing: firstFramePTSSeconds)) writerStatus=\(writer?.status.rawValue ?? -1)\n".utf8))
         return (firstFramePTSSeconds ?? end, end)
+    }
+
+    public func stream(_ stream: SCStream, didStopWithError error: Error) {
+        FileHandle.standardError.write(Data("diag: stream stopped with error: \(error)\n".utf8))
     }
 
     public func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
                        of type: SCStreamOutputType) {
-        guard type == .screen, sampleBuffer.isValid,
+        diagCallbacks += 1
+        guard type == .screen else { return }
+        diagScreenType += 1
+        guard sampleBuffer.isValid,
               let writer = writer, let input = input, let adaptor = adaptor,
               CMSampleBufferGetNumSamples(sampleBuffer) > 0,
               let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        diagWithImage += 1
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
 
         if writer.status == .unknown {
