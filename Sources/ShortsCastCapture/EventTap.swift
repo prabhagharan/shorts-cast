@@ -1,4 +1,3 @@
-// Sources/ShortsCastCapture/EventTap.swift
 import Foundation
 import CoreGraphics
 import ShortsCastCore
@@ -8,8 +7,10 @@ import ShortsCastCore
 /// on that thread.
 public final class EventTap {
     private let handler: (RawInputEvent) -> Void
+    private let lock = NSLock()
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var runLoop: CFRunLoop?
     private var thread: Thread?
 
     public init(handler: @escaping (RawInputEvent) -> Void) {
@@ -25,6 +26,7 @@ public final class EventTap {
         (1 << CGEventType.mouseMoved.rawValue)
 
     public func start() {
+        guard thread == nil else { return }
         let t = Thread { [weak self] in
             guard let self = self else { return }
             let callback: CGEventTapCallBack = { _, type, event, refcon in
@@ -40,9 +42,12 @@ public final class EventTap {
                 callback: callback,
                 userInfo: Unmanaged.passUnretained(self).toOpaque()
             ) else { return }
-            self.tap = tap
             let src = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+            self.lock.lock()
+            self.tap = tap
             self.runLoopSource = src
+            self.runLoop = CFRunLoopGetCurrent()
+            self.lock.unlock()
             CFRunLoopAddSource(CFRunLoopGetCurrent(), src, .commonModes)
             CGEvent.tapEnable(tap: tap, enable: true)
             CFRunLoopRun()
@@ -52,7 +57,13 @@ public final class EventTap {
     }
 
     public func stop() {
+        lock.lock()
+        let tap = self.tap
+        let runLoop = self.runLoop
+        lock.unlock()
         if let tap = tap { CGEvent.tapEnable(tap: tap, enable: false) }
+        if let runLoop = runLoop { CFRunLoopStop(runLoop) }
+        thread = nil
     }
 
     private func dispatch(type: CGEventType, event: CGEvent) {
