@@ -49,4 +49,10 @@ final class CLIOptionsTests: XCTestCase {
             XCTAssertEqual(err as? CLIParseError, .badValue("--seconds"))
         }
     }
+
+    func test_parse_nonPositiveSeconds_throws() {
+        XCTAssertThrowsError(try CLIOptions.parse(["--seconds", "0", "--out", "x"])) { err in
+            XCTAssertEqual(err as? CLIParseError, .badValue("--seconds"))
+        }
+    }
 }

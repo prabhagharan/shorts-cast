@@ -3,8 +3,9 @@ import CoreGraphics
 import ShortsCastCore
 
 /// Listen-only CGEventTap that converts CGEvents into RawInputEvents and feeds a
-/// handler. Runs its own run loop on a background thread. The handler is invoked
-/// on that thread.
+/// handler. Runs its own run loop on a background thread. `stop()` blocks until
+/// that thread has fully drained and exited, so a caller may safely read state
+/// the handler mutated (e.g. an EventLogBuilder) immediately after stop() returns.
 public final class EventTap {
     private let handler: (RawInputEvent) -> Void
     private let lock = NSLock()
@@ -12,6 +13,7 @@ public final class EventTap {
     private var runLoopSource: CFRunLoopSource?
     private var runLoop: CFRunLoop?
     private var thread: Thread?
+    private let finished = DispatchSemaphore(value: 0)
 
     public init(handler: @escaping (RawInputEvent) -> Void) {
         self.handler = handler
@@ -41,7 +43,10 @@ public final class EventTap {
                 eventsOfInterest: EventTap.eventMask,
                 callback: callback,
                 userInfo: Unmanaged.passUnretained(self).toOpaque()
-            ) else { return }
+            ) else {
+                self.finished.signal() // never let stop() block if the tap failed to create
+                return
+            }
             let src = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
             self.lock.lock()
             self.tap = tap
@@ -51,19 +56,31 @@ public final class EventTap {
             CFRunLoopAddSource(CFRunLoopGetCurrent(), src, .commonModes)
             CGEvent.tapEnable(tap: tap, enable: true)
             CFRunLoopRun()
+            // Run loop stopped: tear down on this same thread, then signal completion.
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), src, .commonModes)
+            CFMachPortInvalidate(tap)
+            self.finished.signal()
         }
         t.start()
         thread = t
     }
 
+    /// Stops the tap and blocks until the tap thread has exited.
     public func stop() {
         lock.lock()
-        let tap = self.tap
         let runLoop = self.runLoop
+        let tap = self.tap
         lock.unlock()
+        guard let runLoop = runLoop else { return } // never started, or already stopped
         if let tap = tap { CGEvent.tapEnable(tap: tap, enable: false) }
-        if let runLoop = runLoop { CFRunLoopStop(runLoop) }
-        thread = nil
+        CFRunLoopStop(runLoop)
+        finished.wait() // happens-before: all handler/add() calls complete before we return
+        lock.lock()
+        self.tap = nil
+        self.runLoop = nil
+        self.runLoopSource = nil
+        self.thread = nil
+        lock.unlock()
     }
 
     private func dispatch(type: CGEventType, event: CGEvent) {

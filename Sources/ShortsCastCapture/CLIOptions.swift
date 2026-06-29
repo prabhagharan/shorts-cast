@@ -61,6 +61,7 @@ public struct CLIOptions: Equatable {
         let targetCount = [displayIndex != nil, windowQuery != nil, region != nil].filter { $0 }.count
         if targetCount > 1 { throw CLIParseError.conflictingTargets }
         guard let s = seconds else { throw CLIParseError.missingRequired("--seconds") }
+        guard s > 0 else { throw CLIParseError.badValue("--seconds") }
         guard let o = out else { throw CLIParseError.missingRequired("--out") }
 
         return CLIOptions(seconds: s, out: o, displayIndex: displayIndex,

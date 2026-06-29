@@ -22,6 +22,7 @@ public final class ScreenCaptureSession: NSObject, SCStreamOutput {
     private var input: AVAssetWriterInput?
     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
     public private(set) var firstFramePTSSeconds: Double?
+    public private(set) var writerError: Error?
 
     public init(outputURL: URL, pixelSize: CGSize, cropRectPixels: CGRect?) {
         self.outputURL = outputURL
@@ -61,6 +62,7 @@ public final class ScreenCaptureSession: NSObject, SCStreamOutput {
         let end = machNowSeconds()
         input?.markAsFinished()
         if let w = writer { await w.finishWriting() }
+        writerError = writer?.error
         return (firstFramePTSSeconds ?? end, end)
     }
 

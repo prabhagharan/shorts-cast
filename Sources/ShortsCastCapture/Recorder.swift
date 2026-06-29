@@ -5,6 +5,8 @@ import ShortsCastCore
 
 @available(macOS 12.3, *)
 public enum Recorder {
+    public enum RecorderError: Error { case noFramesCaptured }
+
     public struct Result {
         public let bundleURL: URL
         public let eventLog: EventLog
@@ -28,12 +30,17 @@ public enum Recorder {
         let times = await session.stop()
         tap.stop()
 
+        // Clean up the temp movie on every exit path (success or throw).
+        defer { try? FileManager.default.removeItem(at: tmpMov) }
+
+        if let writerError = session.writerError { throw writerError }
+        guard session.firstFramePTSSeconds != nil else { throw RecorderError.noFramesCaptured }
+
         let log = builder.build(firstFrameT: times.firstFrameT, endT: times.endT)
         let meta = BundleMeta(targetKind: target.kind, displayID: target.displayID,
                               scale: Double(target.scale), captureRect: target.captureRectPoints,
                               appVersion: appVersion, created: createdISO)
         try ProjectBundle.write(eventLog: log, meta: meta, rawVideo: tmpMov, to: outBundle)
-        try? FileManager.default.removeItem(at: tmpMov)
         return Result(bundleURL: outBundle, eventLog: log)
     }
 }
