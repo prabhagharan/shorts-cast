@@ -73,7 +73,7 @@ public enum TargetResolver {
         }
         let dRect = display.frame
         let s = scale(for: display.displayID, pointWidth: dRect.width)
-        let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
+        let filter = SCContentFilter(display: display, excludingWindows: [])
 
         // REGION (crop the full-display capture to the region in pixels)
         if let region = region {
