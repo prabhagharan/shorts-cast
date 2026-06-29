@@ -52,22 +52,36 @@ public final class ScreenCaptureSession: NSObject, SCStreamOutput, SCStreamDeleg
     public func start(filter: SCContentFilter, configuration: SCStreamConfiguration) async throws {
         try makeWriter()
         FileHandle.standardError.write(Data("diag(start): writer ready, adding output + starting stream\n".utf8))
-        let s = SCStream(filter: filter, configuration: configuration, delegate: self)
-        try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
-        stream = s
-        try await s.startCapture()
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            DispatchQueue.main.async {
+                do {
+                    let s = SCStream(filter: filter, configuration: configuration, delegate: self)
+                    try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: self.sampleQueue)
+                    self.stream = s
+                    s.startCapture { error in
+                        if let error = error { cont.resume(throwing: error) }
+                        else { cont.resume() }
+                    }
+                } catch {
+                    cont.resume(throwing: error)
+                }
+            }
+        }
         FileHandle.standardError.write(Data("diag(start): startCapture returned; config=\(configuration.width)x\(configuration.height) queueDepth=\(configuration.queueDepth)\n".utf8))
     }
 
     public func stop() async -> (firstFrameT: Double, endT: Double) {
-        if let s = stream { try? await s.stopCapture() }
+        if let s = stream {
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                DispatchQueue.main.async { s.stopCapture { _ in cont.resume() } }
+            }
+        }
         // Drain any in-flight sample-buffer callback before reading state it writes.
         await withCheckedContinuation { cont in
             sampleQueue.async { cont.resume() }
         }
         let end = machNowSeconds()
-        // Finalize only if the writer actually started (a frame arrived). Calling
-        // markAsFinished()/finishWriting() while status is .unknown throws.
+        // Finalize only if the writer actually started (a frame arrived).
         if let w = writer, w.status == .writing {
             input?.markAsFinished()
             await w.finishWriting()
