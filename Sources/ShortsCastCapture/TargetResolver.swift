@@ -39,6 +39,7 @@ public enum TargetResolver {
         c.minimumFrameInterval = CMTime(value: 1, timescale: 60)
         c.pixelFormat = kCVPixelFormatType_32BGRA
         c.queueDepth = 6
+        c.showsCursor = false // the compositor draws a synthetic cursor; don't bake the OS cursor into raw.mov
         return c
     }
 
