@@ -1335,6 +1335,9 @@ let createdISO = ISO8601DateFormatter().string(from: Date())
 
 let sema = DispatchSemaphore(value: 0)
 Task {
+    // The top-level #available guard above does not propagate into this async
+    // closure, so re-assert it here for the @available(macOS 12.3) calls below.
+    guard #available(macOS 12.3, *) else { exit(1) }
     do {
         let target = try await TargetResolver.resolve(
             displayIndex: options.displayIndex,
