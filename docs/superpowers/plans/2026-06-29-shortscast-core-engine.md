@@ -1475,6 +1475,194 @@ git commit -m "feat: add Director pipeline facade"
 
 ---
 
+### Task 14: Cursor-dwell trigger (gentle auto-zoom on lingering)
+
+Added after the final whole-branch review flagged that the spec's "cursor dwell → gentle zoom" trigger (design §3) was specced but never implemented, and that `dwellWeight` was dead configuration. This task implements a minimal dwell trigger and removes the dead setting.
+
+**Files:**
+- Modify: `Sources/ShortsCastCore/AutoDirector/AutoDirectorSettings.swift` (remove `dwellWeight`; add `dwellTime`, `dwellRadius`, `dwellZoom`)
+- Create: `Sources/ShortsCastCore/AutoDirector/DwellDetector.swift`
+- Modify: `Sources/ShortsCastCore/Director.swift` (merge dwell segments into the pipeline)
+- Test: `Tests/ShortsCastCoreTests/DwellDetectorTests.swift`
+- Test: `Tests/ShortsCastCoreTests/DirectorTests.swift` (add one integration test)
+
+**Interfaces:**
+- Consumes: `EventLog`/`EventType` (Task 2), `AutoDirectorSettings`/`FocusSegment` (Task 6), `EventClusterer` (Task 7), `applyOverrides` (Task 9), `AutoDirector` (Task 8).
+- Produces:
+  - `AutoDirectorSettings` gains `dwellTime: Seconds = 1.0`, `dwellRadius: CGFloat = 60`, `dwellZoom: CGFloat = 1.6`; loses `dwellWeight`.
+  - `struct DwellDetector { init(settings:); func segments(from log: EventLog) -> [FocusSegment] }`
+  - `func mergeNonOverlapping(primary: [FocusSegment], secondary: [FocusSegment]) -> [FocusSegment]`
+  - `Director.direct(log:overrides:)` now merges dwell segments (dropping any that time-overlap a click/scroll/key cluster) before building the camera path.
+
+- [ ] **Step 1: Update settings**
+
+In `Sources/ShortsCastCore/AutoDirector/AutoDirectorSettings.swift`, remove the line `public var dwellWeight: Double = 0.4` and add, alongside the other tunables:
+
+```swift
+    public var dwellTime: Seconds = 1.0
+    public var dwellRadius: CGFloat = 60
+    public var dwellZoom: CGFloat = 1.6
+```
+
+- [ ] **Step 2: Write failing DwellDetector tests**
+
+```swift
+// Tests/ShortsCastCoreTests/DwellDetectorTests.swift
+import XCTest
+import CoreGraphics
+@testable import ShortsCastCore
+
+final class DwellDetectorTests: XCTestCase {
+    private let screen = CGSize(width: 1920, height: 1080)
+    private func detector() -> DwellDetector { DwellDetector(settings: AutoDirectorSettings()) }
+
+    func test_lingeringCursor_producesGentleZoomSegment() {
+        var events: [RecordingEvent] = []
+        var t = 0.0
+        for _ in 0..<45 { events.append(.cursor(t: t, point: CGPoint(x: 500, y: 500))); t += 1.0/30.0 }
+        let log = EventLog(duration: 3, screenSize: screen, events: events)
+        let segs = detector().segments(from: log)
+        XCTAssertEqual(segs.count, 1)
+        XCTAssertEqual(segs[0].zoom, AutoDirectorSettings().dwellZoom, accuracy: 1e-6)
+        XCTAssertEqual(segs[0].center.x, 500, accuracy: 1e-6)
+        XCTAssertGreaterThanOrEqual(segs[0].end - segs[0].start, AutoDirectorSettings().dwellTime)
+    }
+
+    func test_movingCursor_producesNoSegment() {
+        var events: [RecordingEvent] = []
+        var t = 0.0
+        var x = 0.0
+        for _ in 0..<45 { events.append(.cursor(t: t, point: CGPoint(x: x, y: 0))); t += 1.0/30.0; x += 100 }
+        let log = EventLog(duration: 3, screenSize: screen, events: events)
+        XCTAssertTrue(detector().segments(from: log).isEmpty)
+    }
+
+    func test_briefPause_belowThreshold_producesNoSegment() {
+        var events: [RecordingEvent] = []
+        var t = 0.0
+        for _ in 0..<15 { events.append(.cursor(t: t, point: CGPoint(x: 500, y: 500))); t += 1.0/30.0 } // ~0.47s
+        events.append(.cursor(t: t + 0.1, point: CGPoint(x: 1500, y: 900)))                              // jump away
+        let log = EventLog(duration: 3, screenSize: screen, events: events)
+        XCTAssertTrue(detector().segments(from: log).isEmpty)
+    }
+}
+```
+
+- [ ] **Step 3: Run to verify failure**
+
+Run: `swift test --filter DwellDetectorTests`
+Expected: FAIL — `DwellDetector` not defined.
+
+- [ ] **Step 4: Implement DwellDetector**
+
+```swift
+// Sources/ShortsCastCore/AutoDirector/DwellDetector.swift
+import Foundation
+import CoreGraphics
+
+/// Detects periods where the cursor lingers in one area and turns them into
+/// gentle-zoom focus segments. Complements click/scroll/key clustering.
+public struct DwellDetector {
+    public var settings: AutoDirectorSettings
+    public init(settings: AutoDirectorSettings) { self.settings = settings }
+
+    public func segments(from log: EventLog) -> [FocusSegment] {
+        let cursor: [(t: Seconds, p: CGPoint)] = log.events
+            .filter { $0.type == .cursor }
+            .compactMap { e in e.point.map { (e.t, $0) } }
+            .sorted { $0.t < $1.t }
+        guard !cursor.isEmpty else { return [] }
+
+        var result: [FocusSegment] = []
+        var runStart = 0
+
+        func flush(endIdx: Int) {
+            let start = cursor[runStart].t
+            let end = cursor[endIdx].t
+            guard end - start >= settings.dwellTime else { return }
+            var sx = 0.0, sy = 0.0
+            let count = endIdx - runStart + 1
+            for k in runStart...endIdx { sx += Double(cursor[k].p.x); sy += Double(cursor[k].p.y) }
+            let center = CGPoint(x: sx / Double(count), y: sy / Double(count))
+            result.append(FocusSegment(start: start, end: end,
+                                       center: center,
+                                       zoom: min(settings.dwellZoom, settings.maxZoom)))
+        }
+
+        for i in 1..<cursor.count {
+            let anchor = cursor[runStart].p
+            let p = cursor[i].p
+            if hypot(Double(p.x - anchor.x), Double(p.y - anchor.y)) <= Double(settings.dwellRadius) {
+                continue            // still near the anchor — extend the run
+            }
+            flush(endIdx: i - 1)    // run broke — emit it if long enough
+            runStart = i
+        }
+        flush(endIdx: cursor.count - 1)
+        return result
+    }
+}
+
+/// Returns `primary` plus any `secondary` segments that do not time-overlap a
+/// primary one, sorted by start time. Used to fold gentle dwell zooms in
+/// around the stronger click/scroll/key clusters without double-zooming.
+public func mergeNonOverlapping(primary: [FocusSegment],
+                                secondary: [FocusSegment]) -> [FocusSegment] {
+    func overlaps(_ a: FocusSegment, _ b: FocusSegment) -> Bool {
+        a.start < b.end && b.start < a.end
+    }
+    let extra = secondary.filter { s in !primary.contains { overlaps($0, s) } }
+    return (primary + extra).sorted { $0.start < $1.start }
+}
+```
+
+- [ ] **Step 5: Wire dwell into the Director pipeline**
+
+In `Sources/ShortsCastCore/Director.swift`, change the body of `direct(log:overrides:)` so the clustered and dwell segments are merged before overrides:
+
+```swift
+    public func direct(log: EventLog, overrides: [SegmentOverride]) -> DirectorResult {
+        let clustered = EventClusterer(settings: settings).segments(from: log)
+        let dwell = DwellDetector(settings: settings).segments(from: log)
+        let combined = mergeNonOverlapping(primary: clustered, secondary: dwell)
+        let segments = applyOverrides(combined, overrides)
+        let path = AutoDirector(settings: settings)
+            .cameraPath(segments: segments, duration: log.duration, screenSize: log.screenSize)
+        let cursor = CursorTrackBuilder(smoother: SpringSmoother()).build(from: log)
+        return DirectorResult(segments: segments, cameraPath: path, cursor: cursor)
+    }
+```
+
+- [ ] **Step 6: Add a Director integration test**
+
+Add to `Tests/ShortsCastCoreTests/DirectorTests.swift` (the class already defines `private let screen`):
+
+```swift
+    func test_direct_includesDwellSegmentWhenCursorLingersWithoutClicks() {
+        var events: [RecordingEvent] = []
+        var t = 0.0
+        for _ in 0..<45 { events.append(.cursor(t: t, point: CGPoint(x: 700, y: 600))); t += 1.0/30.0 }
+        let log = EventLog(duration: 3, screenSize: screen, events: events)
+        let result = Director(settings: AutoDirectorSettings()).direct(log: log, overrides: [])
+        XCTAssertEqual(result.segments.count, 1)
+        XCTAssertEqual(result.segments[0].zoom, AutoDirectorSettings().dwellZoom, accuracy: 1e-6)
+    }
+```
+
+- [ ] **Step 7: Run focused + full suite**
+
+Run: `swift test --filter DwellDetectorTests` then `swift test --filter DirectorTests` then `swift test`
+Expected: all green; existing `DirectorTests` still pass (the two-cursor sample log produces no dwell, so prior counts are unchanged).
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add Sources/ShortsCastCore/AutoDirector/AutoDirectorSettings.swift Sources/ShortsCastCore/AutoDirector/DwellDetector.swift Sources/ShortsCastCore/Director.swift Tests/ShortsCastCoreTests/DwellDetectorTests.swift Tests/ShortsCastCoreTests/DirectorTests.swift
+git commit -m "feat: add cursor-dwell trigger and remove dead dwellWeight"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage (Core-Engine-relevant sections):**
