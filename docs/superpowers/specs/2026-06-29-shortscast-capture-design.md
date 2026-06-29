@@ -97,7 +97,9 @@ isn't in frame). Key events carry no location and are always kept.
 An `SCStream` configured from an `SCContentFilter`:
 - display → filter for that display,
 - window → filter scoped to the one window,
-- region → display filter with `SCStreamConfiguration.sourceRect` set to the region.
+- region → display filter, capturing the whole display; each frame is then cropped to the
+  region via CoreImage (`SCStreamConfiguration.sourceRect` is macOS 14+, but the dev machine
+  is 12.6, so cropping is done ourselves).
 
 Frames arrive as `CMSampleBuffer`s on an `SCStreamOutput` callback and are appended to an
 `AVAssetWriter` configured for H.264, 60 fps cap, native pixel size, `.mov`. The writer
@@ -134,7 +136,8 @@ shortscast-rec --seconds N
                [--direct]
 ```
 Behavior: check permissions (exit non-zero with guidance if missing); record for N seconds
-(or until Ctrl-C); write the bundle; print the output path. With `--direct`, run the
+(fixed duration; interactive stop is deferred to the editor in Plan 4); write the bundle;
+print the output path. With `--direct`, run the
 captured `EventLog` through `ShortsCastCore`'s `Director` and print the generated
 segment/keyframe counts — an end-to-end smoke test.
 
