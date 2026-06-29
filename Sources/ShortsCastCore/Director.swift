@@ -18,7 +18,9 @@ public struct Director {
 
     public func direct(log: EventLog, overrides: [SegmentOverride]) -> DirectorResult {
         let clustered = EventClusterer(settings: settings).segments(from: log)
-        let segments = applyOverrides(clustered, overrides)
+        let dwell = DwellDetector(settings: settings).segments(from: log)
+        let combined = mergeNonOverlapping(primary: clustered, secondary: dwell)
+        let segments = applyOverrides(combined, overrides)
         let path = AutoDirector(settings: settings)
             .cameraPath(segments: segments, duration: log.duration, screenSize: log.screenSize)
         let cursor = CursorTrackBuilder(smoother: SpringSmoother()).build(from: log)

@@ -15,7 +15,9 @@ public struct AutoDirectorSettings {
     public var clickWeight: Double = 1.0
     public var keyWeight: Double = 0.6
     public var scrollWeight: Double = 0.5
-    public var dwellWeight: Double = 0.4
+    public var dwellTime: Seconds = 1.0
+    public var dwellRadius: CGFloat = 60
+    public var dwellZoom: CGFloat = 1.6
     public var denseEventCount: Int = 5
     public var denseZoomBonus: CGFloat = 0.5
 

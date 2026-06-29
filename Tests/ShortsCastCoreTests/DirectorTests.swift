@@ -40,4 +40,14 @@ final class DirectorTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(rect.minX, 0)
         XCTAssertLessThanOrEqual(rect.maxX, screen.width + 1e-6)
     }
+
+    func test_direct_includesDwellSegmentWhenCursorLingersWithoutClicks() {
+        var events: [RecordingEvent] = []
+        var t = 0.0
+        for _ in 0..<45 { events.append(.cursor(t: t, point: CGPoint(x: 700, y: 600))); t += 1.0/30.0 }
+        let log = EventLog(duration: 3, screenSize: screen, events: events)
+        let result = Director(settings: AutoDirectorSettings()).direct(log: log, overrides: [])
+        XCTAssertEqual(result.segments.count, 1)
+        XCTAssertEqual(result.segments[0].zoom, AutoDirectorSettings().dwellZoom, accuracy: 1e-6)
+    }
 }
