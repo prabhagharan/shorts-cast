@@ -54,6 +54,10 @@ public final class ScreenCaptureSession: NSObject, SCStreamOutput {
 
     public func stop() async -> (firstFrameT: Double, endT: Double) {
         if let s = stream { try? await s.stopCapture() }
+        // Drain any in-flight sample-buffer callback before reading state it writes.
+        await withCheckedContinuation { cont in
+            sampleQueue.async { cont.resume() }
+        }
         let end = machNowSeconds()
         input?.markAsFinished()
         if let w = writer { await w.finishWriting() }
