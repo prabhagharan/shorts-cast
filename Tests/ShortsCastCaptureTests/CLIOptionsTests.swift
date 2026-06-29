@@ -32,4 +32,21 @@ final class CLIOptionsTests: XCTestCase {
             XCTAssertEqual(err as? CLIParseError, .badValue("--rect"))
         }
     }
+    func test_parse_missingOut_throws() {
+        XCTAssertThrowsError(try CLIOptions.parse(["--seconds", "5"])) { err in
+            XCTAssertEqual(err as? CLIParseError, .missingRequired("--out"))
+        }
+    }
+
+    func test_parse_unknownFlag_throws() {
+        XCTAssertThrowsError(try CLIOptions.parse(["--seconds", "5", "--out", "x", "--bogus"])) { err in
+            XCTAssertEqual(err as? CLIParseError, .badValue("--bogus"))
+        }
+    }
+
+    func test_parse_missingValueForFlag_throws() {
+        XCTAssertThrowsError(try CLIOptions.parse(["--seconds"])) { err in
+            XCTAssertEqual(err as? CLIParseError, .badValue("--seconds"))
+        }
+    }
 }
