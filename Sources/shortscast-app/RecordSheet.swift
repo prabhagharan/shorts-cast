@@ -89,7 +89,7 @@ struct RecordSheet: View {
         }
 
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "recording.shortscast"
+        panel.nameFieldStringValue = RecordingName.suggested(date: Date())
         panel.message = "Save the recording bundle"
         guard panel.runModal() == .OK, let out = panel.url else { return }
         recording = true; starting = true
