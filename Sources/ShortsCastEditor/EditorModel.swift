@@ -34,6 +34,7 @@ public final class EditorModel: ObservableObject {
     public func open(_ url: URL) throws {
         let (log, _, raw) = try ProjectBundle.read(url)
         isLoading = true
+        selectedSegment = nil
         bundleURL = url
         eventLog = log
         rawVideoURL = raw
@@ -95,7 +96,7 @@ public final class EditorModel: ObservableObject {
     public func save() throws {
         guard let url = bundleURL else { throw EditorError.notOpen }
         let data = try JSONEncoder().encode(currentEdits())
-        try data.write(to: url.appendingPathComponent("project.json"))
+        try data.write(to: url.appendingPathComponent("project.json"), options: .atomic)
     }
 
     private func loadEdits(from bundle: URL) -> ProjectEdits? {
