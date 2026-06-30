@@ -7,6 +7,8 @@ struct PreviewView: View {
     @Binding var currentTime: Double
     @State private var timer: Timer?
     @State private var playing = false
+    @State private var startWall: Double = 0
+    @State private var startTime: Double = 0
 
     var body: some View {
         VStack(spacing: 8) {
@@ -38,10 +40,17 @@ struct PreviewView: View {
         playing.toggle()
         timer?.invalidate()
         guard playing else { return }
+        // Anchor playback to the wall clock so a slow render skips frames rather
+        // than playing in slow motion (the per-tick fixed step did the latter).
+        startWall = Date.timeIntervalSinceReferenceDate
+        startTime = currentTime >= model.duration ? 0 : currentTime
+        currentTime = startTime
         timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { _ in
-            let next = currentTime + 1.0 / 30.0
-            if next >= model.duration { currentTime = model.duration; playing = false; timer?.invalidate() }
-            else { currentTime = next }
+            let r = PlaybackClock.tick(startWall: startWall, startTime: startTime,
+                                       nowWall: Date.timeIntervalSinceReferenceDate,
+                                       duration: model.duration)
+            currentTime = r.time
+            if !r.playing { playing = false; timer?.invalidate() }
         }
     }
 }
