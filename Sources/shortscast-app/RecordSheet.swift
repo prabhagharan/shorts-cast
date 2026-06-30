@@ -43,6 +43,11 @@ struct RecordSheet: View {
                 }
             }
 
+            if !recording && mode == .window {
+                Text("Full-screen apps aren't listed here (macOS puts them on a separate Space). To record one, choose Display and switch into it.")
+                    .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+
             HStack {
                 if recording {
                     if starting || stopping { ProgressView().scaleEffect(0.6) }
