@@ -10,7 +10,8 @@ let package = Package(
         .library(name: "ShortsCastRender", targets: ["ShortsCastRender"]),
         .library(name: "ShortsCastEditor", targets: ["ShortsCastEditor"]),
         .executable(name: "shortscast-rec", targets: ["shortscast-rec"]),
-        .executable(name: "shortscast-export", targets: ["shortscast-export"])
+        .executable(name: "shortscast-export", targets: ["shortscast-export"]),
+        .executable(name: "shortscast-app", targets: ["shortscast-app"])
     ],
     targets: [
         .target(name: "ShortsCastCore"),
@@ -22,6 +23,7 @@ let package = Package(
         .target(name: "ShortsCastEditor", dependencies: ["ShortsCastCore", "ShortsCastCapture", "ShortsCastRender"]),
         .testTarget(name: "ShortsCastEditorTests", dependencies: ["ShortsCastEditor"]),
         .executableTarget(name: "shortscast-rec", dependencies: ["ShortsCastCapture", "ShortsCastCore"]),
-        .executableTarget(name: "shortscast-export", dependencies: ["ShortsCastRender", "ShortsCastCore", "ShortsCastCapture"])
+        .executableTarget(name: "shortscast-export", dependencies: ["ShortsCastRender", "ShortsCastCore", "ShortsCastCapture"]),
+        .executableTarget(name: "shortscast-app", dependencies: ["ShortsCastEditor", "ShortsCastCore", "ShortsCastCapture", "ShortsCastRender"])
     ]
 )
