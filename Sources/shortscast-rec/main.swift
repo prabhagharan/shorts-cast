@@ -9,10 +9,6 @@ func fail(_ message: String, code: Int32 = 1) -> Never {
     exit(code)
 }
 
-guard #available(macOS 12.3, *) else {
-    fail("shortscast-rec requires macOS 12.3 or later (ScreenCaptureKit).")
-}
-
 let options: CLIOptions
 do {
     options = try CLIOptions.parse(Array(CommandLine.arguments.dropFirst()))
@@ -39,8 +35,6 @@ let createdISO = ISO8601DateFormatter().string(from: Date())
 // block the main thread. Run the recording on a Task and keep the main run loop
 // alive with CFRunLoopRun(); the Task calls exit() when done.
 Task {
-    // The top-level #available guard does not propagate into this async closure.
-    guard #available(macOS 12.3, *) else { exit(1) }
     do {
         let target = try TargetResolver.resolve(
             displayIndex: options.displayIndex,
