@@ -72,4 +72,35 @@ public enum TargetResolver {
         // FULL DISPLAY
         return ResolvedTarget(kind: "display", displayID: did, captureRectPoints: dRect, scale: s, cropRect: nil)
     }
+
+    /// Active displays in `resolve(displayIndex:)` order, for a picker.
+    public static func displays() -> [DisplayOption] {
+        let main = CGMainDisplayID()
+        return activeDisplays().enumerated().map { i, did in
+            let mode = CGDisplayCopyDisplayMode(did)
+            return DisplayOption(index: i, displayID: did, isMain: did == main,
+                                 pixelWidth: mode?.pixelWidth ?? Int(CGDisplayPixelsWide(did)),
+                                 pixelHeight: mode?.pixelHeight ?? Int(CGDisplayPixelsHigh(did)))
+        }
+    }
+
+    /// On-screen, user-pickable windows. `WindowOption.windowNumber` (as a string)
+    /// is an exact `windowQuery` for `resolve`.
+    public static func windows() -> [WindowOption] {
+        let list = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
+                                               kCGNullWindowID) as? [[String: Any]]) ?? []
+        return WindowFinder.options(in: list)
+    }
+}
+
+/// A user-pickable display. `index` is the value to pass as `resolve(displayIndex:)`.
+public struct DisplayOption: Equatable {
+    public let index: Int
+    public let displayID: CGDirectDisplayID
+    public let isMain: Bool
+    public let pixelWidth: Int
+    public let pixelHeight: Int
+    public var label: String {
+        "Display \(index + 1) (\(pixelWidth)×\(pixelHeight))" + (isMain ? " — Main" : "")
+    }
 }

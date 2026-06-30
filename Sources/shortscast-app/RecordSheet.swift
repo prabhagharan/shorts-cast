@@ -5,25 +5,57 @@ import ShortsCastEditor
 import ShortsCastCapture
 
 struct RecordSheet: View {
+    enum Mode: Int { case display, window }
+
     @ObservedObject var model: EditorModel
     @Binding var isPresented: Bool
     @Binding var errorMessage: String?
     @Binding var currentTime: Double
     @State private var seconds: Double = 5
     @State private var recording = false
+    @State private var mode: Mode = .display
+    @State private var displays: [DisplayOption] = []
+    @State private var windows: [WindowOption] = []
+    @State private var displayIndex = 0
+    @State private var windowNumber = -1
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("New recording (main display)").font(.headline)
+            Text("New recording").font(.headline)
+            Picker("Capture", selection: $mode) {
+                Text("Display").tag(Mode.display)
+                Text("Window").tag(Mode.window)
+            }.pickerStyle(.segmented)
+
+            if mode == .display {
+                Picker("Display", selection: $displayIndex) {
+                    ForEach(displays, id: \.index) { Text($0.label).tag($0.index) }
+                }
+            } else if windows.isEmpty {
+                Text("No capturable windows found.").foregroundColor(.secondary)
+            } else {
+                Picker("Window", selection: $windowNumber) {
+                    ForEach(windows, id: \.windowNumber) { Text($0.label).tag($0.windowNumber) }
+                }
+            }
+
             HStack { Text("Duration"); Slider(value: $seconds, in: 2...30); Text("\(Int(seconds))s").frame(width: 36) }
             HStack {
                 Button("Cancel") { isPresented = false }.disabled(recording)
                 Spacer()
                 if recording { ProgressView().scaleEffect(0.6) }
-                Button("Record") { start() }.disabled(recording)
+                Button("Record") { start() }.disabled(recording || (mode == .window && windowNumber < 0))
             }
         }
-        .padding(20).frame(width: 320)
+        .padding(20).frame(width: 360)
+        .onAppear(perform: loadTargets)
+    }
+
+    private func loadTargets() {
+        displays = TargetResolver.displays()
+        windows = TargetResolver.windows()
+        if displays.indices.contains(displayIndex) == false { displayIndex = displays.first?.index ?? 0 }
+        if windowNumber < 0 { windowNumber = windows.first?.windowNumber ?? -1 }
     }
 
     private func start() {
@@ -46,9 +78,12 @@ struct RecordSheet: View {
         panel.message = "Save the recording bundle"
         guard panel.runModal() == .OK, let out = panel.url else { return }
         recording = true
+        let captureMode = mode, dIndex = displayIndex, wNumber = windowNumber
         Task {
             do {
-                let target = try TargetResolver.resolve(displayIndex: nil, windowQuery: nil, region: nil)
+                let target = captureMode == .window
+                    ? try TargetResolver.resolve(displayIndex: nil, windowQuery: String(wNumber), region: nil)
+                    : try TargetResolver.resolve(displayIndex: dIndex, windowQuery: nil, region: nil)
                 try await model.record(target: target, seconds: seconds, outBundle: out,
                                        appVersion: ShortsCastCapture.version,
                                        createdISO: ISO8601DateFormatter().string(from: Date()))
