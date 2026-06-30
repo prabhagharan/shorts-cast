@@ -23,6 +23,8 @@ struct RootView: View {
             ToolbarView(model: model, currentTime: $currentTime, errorMessage: $errorMessage)
             Divider()
             PreviewView(model: model, currentTime: $currentTime)
+            Divider()
+            TimelineView(model: model, currentTime: $currentTime)
         }
         .alert("Error", isPresented: Binding(get: { errorMessage != nil },
                                              set: { if !$0 { errorMessage = nil } })) {
