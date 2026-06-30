@@ -103,4 +103,10 @@ public final class EditorModel: ObservableObject {
         guard let data = try? Data(contentsOf: p) else { return nil }
         return try? JSONDecoder().decode(ProjectEdits.self, from: data)
     }
+
+    public func export(formats: [OutputFormat], outDir: URL) throws -> [URL] {
+        guard let url = bundleURL else { throw EditorError.notOpen }
+        return try ExportJob.run(bundleURL: url, formats: formats, style: style,
+                                 settings: settings, outDir: outDir, overrides: overrides)
+    }
 }
