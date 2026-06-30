@@ -22,7 +22,10 @@ struct RootView: View {
         VStack(spacing: 0) {
             ToolbarView(model: model, currentTime: $currentTime, errorMessage: $errorMessage)
             Divider()
-            PreviewView(model: model, currentTime: $currentTime)
+            HSplitView {
+                PreviewView(model: model, currentTime: $currentTime)
+                InspectorView(model: model)
+            }
             Divider()
             TimelineView(model: model, currentTime: $currentTime)
         }
