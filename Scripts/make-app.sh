@@ -17,12 +17,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-swift build -c release
+# Build a universal (arm64 + x86_64) release so the bundle runs on both Apple
+# Silicon and Intel Macs when copied to another machine. With multiple --arch the
+# products land outside .build/release, so resolve the real dir via --show-bin-path.
+ARCH_FLAGS=(--arch arm64 --arch x86_64)
+swift build -c release "${ARCH_FLAGS[@]}"
+BIN="$(swift build -c release "${ARCH_FLAGS[@]}" --show-bin-path)"
 
 APP="$ROOT/.build/ShortsCastRec.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
-cp "$ROOT/.build/release/shortscast-rec" "$APP/Contents/MacOS/shortscast-rec"
+cp "$BIN/shortscast-rec" "$APP/Contents/MacOS/shortscast-rec"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -52,7 +57,7 @@ echo "  $APP/Contents/MacOS/shortscast-rec --seconds 5 --out /tmp/test.shortscas
 APP="$ROOT/.build/ShortsCastApp.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
-cp "$ROOT/.build/release/shortscast-app" "$APP/Contents/MacOS/shortscast-app"
+cp "$BIN/shortscast-app" "$APP/Contents/MacOS/shortscast-app"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
