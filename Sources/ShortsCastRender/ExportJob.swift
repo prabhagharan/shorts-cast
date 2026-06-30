@@ -5,9 +5,10 @@ import ShortsCastCapture
 
 public enum ExportJob {
     public static func run(bundleURL: URL, formats: [OutputFormat], style: RenderStyle,
-                           settings: AutoDirectorSettings, outDir: URL) throws -> [URL] {
+                           settings: AutoDirectorSettings, outDir: URL,
+                           overrides: [SegmentOverride] = []) throws -> [URL] {
         let (eventLog, _, rawVideoURL) = try ProjectBundle.read(bundleURL)
-        let result = Director(settings: settings).direct(log: eventLog, overrides: [])
+        let result = Director(settings: settings).direct(log: eventLog, overrides: overrides)
         try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 
         let base = bundleURL.deletingPathExtension().lastPathComponent
