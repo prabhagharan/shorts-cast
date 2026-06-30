@@ -72,6 +72,16 @@ public final class EditorModel: ObservableObject {
         regenerate()
     }
 
+    /// Overrides this segment's ease-in / ease-out durations (seconds).
+    public func setZoomInDuration(segment index: Int, duration: Double) {
+        overrides = upsertOverride(overrides, index: index, zoomInDuration: duration)
+        regenerate()
+    }
+    public func setZoomOutDuration(segment index: Int, duration: Double) {
+        overrides = upsertOverride(overrides, index: index, zoomOutDuration: duration)
+        regenerate()
+    }
+
     public func clearOverride(segment index: Int) {
         overrides.removeAll { $0.index == index }
         regenerate()

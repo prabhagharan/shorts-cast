@@ -35,6 +35,9 @@ struct InspectorView: View {
             Section("Auto-zoom") {
                 zoomSlider("Default ×", \.defaultZoom, 1...5)
                 zoomSlider("Max ×", \.maxZoom, 1...6)
+                Text("Speed — seconds, lower = snappier").font(.caption).foregroundColor(.secondary)
+                durationSlider("Zoom-in", \.zoomInDuration, 0.1...1.5)
+                durationSlider("Zoom-out", \.zoomOutDuration, 0.1...1.5)
                 Toggle("Zoom out in place", isOn: Binding(
                     get: { model.settings.zoomOutInPlace },
                     set: { model.settings.zoomOutInPlace = $0 }))
@@ -51,6 +54,13 @@ struct InspectorView: View {
                     Text("Focus point")
                     centerSlider("X", sel, \.x, model.screenSize.width)
                     centerSlider("Y", sel, \.y, model.screenSize.height)
+                    Text("Speed (seconds)")
+                    segmentDurationSlider("Zoom-in", sel,
+                        get: { model.segments[sel].zoomInDuration ?? model.settings.zoomInDuration },
+                        set: { model.setZoomInDuration(segment: sel, duration: $0) })
+                    segmentDurationSlider("Zoom-out", sel,
+                        get: { model.segments[sel].zoomOutDuration ?? model.settings.zoomOutDuration },
+                        set: { model.setZoomOutDuration(segment: sel, duration: $0) })
                     Button("Reset") { model.clearOverride(segment: sel) }
                 }
             }
@@ -87,6 +97,16 @@ struct InspectorView: View {
     private func zoomSlider(_ label: String, _ key: WritableKeyPath<AutoDirectorSettings, CGFloat>, _ range: ClosedRange<Double>) -> some View {
         Slider(value: Binding(get: { Double(model.settings[keyPath: key]) },
                               set: { model.settings[keyPath: key] = CGFloat($0) }), in: range) { Text(label) }
+    }
+    // Global ease duration (seconds), a Double keypath on settings.
+    private func durationSlider(_ label: String, _ key: WritableKeyPath<AutoDirectorSettings, Double>, _ range: ClosedRange<Double>) -> some View {
+        Slider(value: Binding(get: { model.settings[keyPath: key] },
+                              set: { model.settings[keyPath: key] = $0 }), in: range) { Text(label) }
+    }
+    // Selected segment's ease duration (seconds), via get/set closures.
+    private func segmentDurationSlider(_ label: String, _ sel: Int,
+                                       get: @escaping () -> Double, set: @escaping (Double) -> Void) -> some View {
+        Slider(value: Binding(get: get, set: set), in: 0.1...1.5) { Text(label) }
     }
     // Normalized 0…1 resting-anchor component.
     private func anchorSlider(_ label: String, _ comp: WritableKeyPath<CGPoint, CGFloat>) -> some View {
