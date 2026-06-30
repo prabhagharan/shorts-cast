@@ -24,7 +24,9 @@ public enum ProjectBundle {
         let fm = FileManager.default
         guard fm.fileExists(atPath: rawVideo.path) else { throw BundleError.rawVideoMissing }
         try fm.createDirectory(at: bundleURL, withIntermediateDirectories: true)
-        try fm.copyItem(at: rawVideo, to: bundleURL.appendingPathComponent("raw.mov"))
+        let rawDest = bundleURL.appendingPathComponent("raw.mov")
+        try? fm.removeItem(at: rawDest)   // overwrite if re-recording to the same bundle path
+        try fm.copyItem(at: rawVideo, to: rawDest)
         let enc = JSONEncoder()
         try enc.encode(eventLog).write(to: bundleURL.appendingPathComponent("events.json"))
         try enc.encode(meta).write(to: bundleURL.appendingPathComponent("meta.json"))

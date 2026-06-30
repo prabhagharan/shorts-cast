@@ -39,4 +39,26 @@ final class ProjectBundleTests: XCTestCase {
             eventLog: log, meta: meta,
             rawVideo: URL(fileURLWithPath: "/no/such/file.mov"), to: bundle))
     }
+
+    func test_write_overwritesExistingBundle() throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("scbundle-overwrite-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let fakeMov = tmp.appendingPathComponent("src.mov")
+        try Data("v1".utf8).write(to: fakeMov)
+        let log = EventLog(duration: 1, screenSize: CGSize(width: 100, height: 100), events: [])
+        let meta = BundleMeta(targetKind: "display", displayID: 1, scale: 1,
+                              captureRect: CGRect(x: 0, y: 0, width: 100, height: 100),
+                              appVersion: "0", created: "t")
+        let bundle = tmp.appendingPathComponent("out.shortscast")
+        try ProjectBundle.write(eventLog: log, meta: meta, rawVideo: fakeMov, to: bundle)
+        // Writing again to the same bundle path must NOT throw (overwrites raw.mov).
+        let fakeMov2 = tmp.appendingPathComponent("src2.mov")
+        try Data("v2-longer-contents".utf8).write(to: fakeMov2)
+        XCTAssertNoThrow(try ProjectBundle.write(eventLog: log, meta: meta, rawVideo: fakeMov2, to: bundle))
+        let written = try Data(contentsOf: bundle.appendingPathComponent("raw.mov"))
+        XCTAssertEqual(String(data: written, encoding: .utf8), "v2-longer-contents")
+    }
 }
