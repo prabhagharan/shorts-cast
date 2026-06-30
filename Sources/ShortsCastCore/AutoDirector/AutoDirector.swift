@@ -26,22 +26,24 @@ public struct AutoDirector {
         }
 
         for (i, seg) in segments.enumerated() {
+            let inDur = seg.zoomInDuration ?? settings.zoomInDuration    // per-segment overrides global
+            let outDur = seg.zoomOutDuration ?? settings.zoomOutDuration
             let target = CameraState(center: seg.center, scale: seg.zoom)
             push(seg.start, current)                                   // hold until move begins
-            push(seg.start + settings.zoomInDuration, target)         // ease in
-            push(max(seg.end, seg.start + settings.zoomInDuration), target) // hold while active
+            push(seg.start + inDur, target)                            // ease in
+            push(max(seg.end, seg.start + inDur), target)              // hold while active
 
             let nextStart = i + 1 < segments.count ? segments[i + 1].start : Double.infinity
             let gap = nextStart - seg.end
             // Only return to resting when there is room to complete the zoom-out
             // before the next segment begins; otherwise stay zoomed and pan.
-            if gap > settings.inactivityTimeout + settings.zoomOutDuration {
+            if gap > settings.inactivityTimeout + outDur {
                 // Zoom out in place (keep the focus position) or pull back to the resting anchor.
                 let out = settings.zoomOutInPlace
                     ? CameraState(center: seg.center, scale: settings.restingZoom)
                     : rest
                 push(seg.end + settings.inactivityTimeout, target)    // hold, then
-                push(seg.end + settings.inactivityTimeout + settings.zoomOutDuration, out) // zoom out
+                push(seg.end + settings.inactivityTimeout + outDur, out) // zoom out
             }
             // else: stay zoomed; the next segment pans/zooms from `current`.
         }
