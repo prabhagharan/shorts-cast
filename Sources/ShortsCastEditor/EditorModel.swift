@@ -13,7 +13,7 @@ public final class EditorModel: ObservableObject {
     @Published public private(set) var bundleURL: URL?
     @Published public private(set) var eventLog: EventLog?
     @Published public private(set) var rawVideoURL: URL?
-    @Published public private(set) var screenSize: CGSize = .zero
+    @Published public private(set) var screenSize: CGSize = .zero { didSet { if !isLoading { invalidateCompositor() } } }
     @Published public private(set) var overrides: [SegmentOverride] = []
     @Published public private(set) var result: DirectorResult?
     @Published public var selectedSegment: Int?
