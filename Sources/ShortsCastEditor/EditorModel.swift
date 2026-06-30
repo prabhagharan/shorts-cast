@@ -53,5 +53,16 @@ public final class EditorModel: ObservableObject {
         result = Director(settings: settings).direct(log: log, overrides: overrides)
     }
 
+    public func setZoom(segment index: Int, zoom: CGFloat) {
+        overrides.removeAll { $0.index == index }
+        overrides.append(SegmentOverride(index: index, zoom: zoom))
+        regenerate()
+    }
+
+    public func clearOverride(segment index: Int) {
+        overrides.removeAll { $0.index == index }
+        regenerate()
+    }
+
     private func invalidateCompositor() { cachedCompositor = nil }
 }
