@@ -2,7 +2,7 @@ import Foundation
 import CoreGraphics
 
 /// A manual edit to a generated focus segment (e.g. the user sets this zoom to 3×).
-public struct SegmentOverride: Equatable {
+public struct SegmentOverride: Equatable, Codable {
     public var index: Int
     public var zoom: CGFloat?
     public var center: CGPoint?

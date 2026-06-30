@@ -3,7 +3,7 @@ import Foundation
 import CoreGraphics
 
 /// Tunables that drive auto-zoom generation. User-facing global zoom controls live here.
-public struct AutoDirectorSettings {
+public struct AutoDirectorSettings: Codable, Equatable {
     public var defaultZoom: CGFloat = 2.5
     public var maxZoom: CGFloat = 4.0
     public var restingZoom: CGFloat = 1.0
