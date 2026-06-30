@@ -11,8 +11,9 @@ struct RecordSheet: View {
     @Binding var isPresented: Bool
     @Binding var errorMessage: String?
     @Binding var currentTime: Double
-    @State private var seconds: Double = 5
     @State private var recording = false
+    @State private var starting = false
+    @State private var stopping = false
     @State private var mode: Mode = .display
     @State private var displays: [DisplayOption] = []
     @State private var windows: [WindowOption] = []
@@ -27,7 +28,10 @@ struct RecordSheet: View {
                 Text("Window").tag(Mode.window)
             }.pickerStyle(.segmented)
 
-            if mode == .display {
+            if recording {
+                Label("Recording… click Stop when finished.", systemImage: "record.circle")
+                    .foregroundColor(.red)
+            } else if mode == .display {
                 Picker("Display", selection: $displayIndex) {
                     ForEach(displays, id: \.index) { Text($0.label).tag($0.index) }
                 }
@@ -39,15 +43,21 @@ struct RecordSheet: View {
                 }
             }
 
-            HStack { Text("Duration"); Slider(value: $seconds, in: 2...30); Text("\(Int(seconds))s").frame(width: 36) }
             HStack {
-                Button("Cancel") { isPresented = false }.disabled(recording)
-                Spacer()
-                if recording { ProgressView().scaleEffect(0.6) }
-                Button("Record") { start() }.disabled(recording || (mode == .window && windowNumber < 0))
+                if recording {
+                    if starting || stopping { ProgressView().scaleEffect(0.6) }
+                    Spacer()
+                    Button("Stop") { stop() }.keyboardShortcut(.defaultAction)
+                        .disabled(starting || stopping)
+                } else {
+                    Button("Cancel") { isPresented = false }
+                    Spacer()
+                    Button("Record") { start() }.disabled(mode == .window && windowNumber < 0)
+                }
             }
         }
         .padding(20).frame(width: 360)
+        .interactiveDismissDisabled(recording)
         .onAppear(perform: loadTargets)
     }
 
@@ -77,19 +87,31 @@ struct RecordSheet: View {
         panel.nameFieldStringValue = "recording.shortscast"
         panel.message = "Save the recording bundle"
         guard panel.runModal() == .OK, let out = panel.url else { return }
-        recording = true
+        recording = true; starting = true
         let captureMode = mode, dIndex = displayIndex, wNumber = windowNumber
         Task {
             do {
                 let target = captureMode == .window
                     ? try TargetResolver.resolve(displayIndex: nil, windowQuery: String(wNumber), region: nil)
                     : try TargetResolver.resolve(displayIndex: dIndex, windowQuery: nil, region: nil)
-                try await model.record(target: target, seconds: seconds, outBundle: out,
-                                       appVersion: ShortsCastCapture.version,
-                                       createdISO: ISO8601DateFormatter().string(from: Date()))
-                await MainActor.run { recording = false; isPresented = false; currentTime = 0 }
+                try await model.startRecording(target: target, outBundle: out,
+                                               appVersion: ShortsCastCapture.version,
+                                               createdISO: ISO8601DateFormatter().string(from: Date()))
+                await MainActor.run { starting = false }
             } catch {
-                await MainActor.run { recording = false; errorMessage = "Record failed: \(error)" }
+                await MainActor.run { recording = false; starting = false; errorMessage = "Record failed: \(error)" }
+            }
+        }
+    }
+
+    private func stop() {
+        stopping = true
+        Task {
+            do {
+                try await model.stopRecording()
+                await MainActor.run { recording = false; stopping = false; isPresented = false; currentTime = 0 }
+            } catch {
+                await MainActor.run { recording = false; stopping = false; errorMessage = "Record failed: \(error)" }
             }
         }
     }

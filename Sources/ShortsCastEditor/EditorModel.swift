@@ -117,4 +117,24 @@ public final class EditorModel: ObservableObject {
                                       appVersion: appVersion, createdISO: createdISO)
         try open(outBundle)
     }
+
+    private var recordingController: RecordingController?
+
+    /// Begins open-ended capture. Call `stopRecording()` to finish and open the bundle.
+    public func startRecording(target: ResolvedTarget, outBundle: URL,
+                               appVersion: String, createdISO: String) async throws {
+        let c = RecordingController(target: target, outBundle: outBundle,
+                                    appVersion: appVersion, createdISO: createdISO)
+        try await c.start()
+        recordingController = c
+    }
+
+    /// Stops capture started by `startRecording`, writes the bundle, and opens it.
+    /// No-op if not recording.
+    public func stopRecording() async throws {
+        guard let c = recordingController else { return }
+        recordingController = nil
+        let result = try await c.stop()
+        try open(result.bundleURL)
+    }
 }
