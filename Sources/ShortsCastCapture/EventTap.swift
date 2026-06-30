@@ -84,6 +84,14 @@ public final class EventTap {
     }
 
     private func dispatch(type: CGEventType, event: CGEvent) {
+        // macOS disables a tap if a callback runs long or on certain input/focus
+        // transitions (e.g. switching to a full-screen app). It must be re-enabled
+        // or the tap goes permanently silent — the cause of clicks vanishing mid-record.
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            lock.lock(); let tap = self.tap; lock.unlock()
+            if let tap = tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            return
+        }
         let t = machNowSeconds()
         let loc = event.location // global points, top-left origin
         switch type {
