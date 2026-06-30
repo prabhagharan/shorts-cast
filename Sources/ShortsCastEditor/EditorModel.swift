@@ -109,4 +109,12 @@ public final class EditorModel: ObservableObject {
         return try ExportJob.run(bundleURL: url, formats: formats, style: style,
                                  settings: settings, outDir: outDir, overrides: overrides)
     }
+
+    @available(macOS 12.3, *)
+    public func record(target: ResolvedTarget, seconds: Double, outBundle: URL,
+                       appVersion: String, createdISO: String) async throws {
+        _ = try await Recorder.record(target: target, seconds: seconds, outBundle: outBundle,
+                                      appVersion: appVersion, createdISO: createdISO)
+        try open(outBundle)
+    }
 }
