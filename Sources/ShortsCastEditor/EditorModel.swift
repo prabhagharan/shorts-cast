@@ -38,10 +38,17 @@ public final class EditorModel: ObservableObject {
         eventLog = log
         rawVideoURL = raw
         screenSize = log.screenSize
-        overrides = []
-        settings = AutoDirectorSettings()
-        style = .default
-        format = .vertical9x16
+        if let edits = loadEdits(from: url) {
+            overrides = edits.overrides
+            settings = edits.settings
+            style = edits.style
+            format = OutputFormat.all.first { $0.name == edits.formatName } ?? .vertical9x16
+        } else {
+            overrides = []
+            settings = AutoDirectorSettings()
+            style = .default
+            format = .vertical9x16
+        }
         frameSource = AVAssetFrameSource(url: raw)
         cachedCompositor = nil
         isLoading = false
@@ -65,4 +72,20 @@ public final class EditorModel: ObservableObject {
     }
 
     private func invalidateCompositor() { cachedCompositor = nil }
+
+    public func currentEdits() -> ProjectEdits {
+        ProjectEdits(overrides: overrides, style: style, formatName: format.name, settings: settings)
+    }
+
+    public func save() throws {
+        guard let url = bundleURL else { throw EditorError.notOpen }
+        let data = try JSONEncoder().encode(currentEdits())
+        try data.write(to: url.appendingPathComponent("project.json"))
+    }
+
+    private func loadEdits(from bundle: URL) -> ProjectEdits? {
+        let p = bundle.appendingPathComponent("project.json")
+        guard let data = try? Data(contentsOf: p) else { return nil }
+        return try? JSONDecoder().decode(ProjectEdits.self, from: data)
+    }
 }
