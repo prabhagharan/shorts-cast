@@ -8,17 +8,22 @@ struct ToolbarView: View {
     @Binding var currentTime: Double
     @Binding var errorMessage: String?
     @State private var showExport = false
+    @State private var showRecord = false
 
     var body: some View {
         HStack(spacing: 12) {
             Button("Open") { openBundle() }
             Button("Save") { save() }.disabled(model.bundleURL == nil)
+            Button("Record") { showRecord = true }
             Spacer()
             Button("Export") { showExport = true }.disabled(model.result == nil)
         }
         .padding(8)
         .sheet(isPresented: $showExport) {
             ExportSheet(model: model, isPresented: $showExport, errorMessage: $errorMessage)
+        }
+        .sheet(isPresented: $showRecord) {
+            RecordSheet(model: model, isPresented: $showRecord, errorMessage: $errorMessage, currentTime: $currentTime)
         }
     }
 
