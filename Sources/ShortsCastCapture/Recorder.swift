@@ -3,10 +3,8 @@ import Foundation
 import CoreGraphics
 import ShortsCastCore
 
-@available(macOS 12.3, *)
 public enum Recorder {
     public enum RecorderError: Error { case noFramesCaptured }
-
     public struct Result {
         public let bundleURL: URL
         public let eventLog: EventLog
@@ -22,17 +20,14 @@ public enum Recorder {
 
         let tmpMov = FileManager.default.temporaryDirectory
             .appendingPathComponent("shortscast-\(UUID().uuidString).mov")
-        let session = ScreenCaptureSession(outputURL: tmpMov,
-                                           pixelSize: geometry.pixelSize,
-                                           cropRectPixels: target.cropPixels)
-        try await session.start(filter: target.filter, configuration: target.configuration)
+        let session = AVScreenCaptureSession(outputURL: tmpMov, displayID: target.displayID,
+                                             cropRect: target.cropRect, pixelSize: geometry.pixelSize)
+        try await session.start()
         try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
         let times = await session.stop()
         tap.stop()
 
-        // Clean up the temp movie on every exit path (success or throw).
         defer { try? FileManager.default.removeItem(at: tmpMov) }
-
         if let writerError = session.writerError { throw writerError }
         guard session.firstFramePTSSeconds != nil else { throw RecorderError.noFramesCaptured }
 

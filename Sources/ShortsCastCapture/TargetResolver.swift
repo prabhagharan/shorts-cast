@@ -1,97 +1,73 @@
 // Sources/ShortsCastCapture/TargetResolver.swift
 import Foundation
 import CoreGraphics
-import ScreenCaptureKit
 
-@available(macOS 12.3, *)
+/// A resolved capture target for AVCaptureScreenInput.
 public struct ResolvedTarget {
-    public let kind: String
-    public let displayID: UInt32?
-    public let captureRectPoints: CGRect
-    public let scale: CGFloat
-    public let cropPixels: CGRect?
-    public let filter: SCContentFilter
-    public let configuration: SCStreamConfiguration
+    public let kind: String                 // "display" | "region" | "window"
+    public let displayID: CGDirectDisplayID
+    public let captureRectPoints: CGRect     // captured area in global points (events map into this)
+    public let scale: CGFloat                // pixels per point
+    public let cropRect: CGRect?             // AVCaptureScreenInput.cropRect (display-local points); nil = full display
 }
 
-@available(macOS 12.3, *)
 public enum TargetResolver {
     public enum ResolveError: Error { case noDisplay, noWindow, badRegion }
-
-    private static func shareableContent() async throws -> SCShareableContent {
-        try await withCheckedThrowingContinuation { cont in
-            SCShareableContent.getWithCompletionHandler { content, error in
-                if let content = content { cont.resume(returning: content) }
-                else { cont.resume(throwing: error ?? ResolveError.noDisplay) }
-            }
-        }
-    }
 
     private static func scale(for displayID: CGDirectDisplayID, pointWidth: CGFloat) -> CGFloat {
         guard let mode = CGDisplayCopyDisplayMode(displayID), pointWidth > 0 else { return 1 }
         return CGFloat(mode.pixelWidth) / pointWidth
     }
 
-    private static func config(pixelWidth: Int, pixelHeight: Int) -> SCStreamConfiguration {
-        let c = SCStreamConfiguration()
-        c.width = pixelWidth
-        c.height = pixelHeight
-        c.minimumFrameInterval = CMTime(value: 1, timescale: 60)
-        c.pixelFormat = kCVPixelFormatType_32BGRA
-        c.queueDepth = 6
-        c.showsCursor = false // the compositor draws a synthetic cursor; don't bake the OS cursor into raw.mov
-        return c
+    private static func activeDisplays() -> [CGDirectDisplayID] {
+        var count: UInt32 = 0
+        CGGetActiveDisplayList(0, nil, &count)
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        CGGetActiveDisplayList(count, &ids, &count)
+        return Array(ids.prefix(Int(count)))
     }
 
-    public static func resolve(displayIndex: Int?, windowQuery: String?, region: CGRect?) async throws -> ResolvedTarget {
-        let content = try await shareableContent()
+    /// Convert a global (top-left origin) rect into AVCaptureScreenInput.cropRect, which is in the
+    /// display's local coordinate space with a bottom-left origin (Quartz). Verified by Task 4.
+    private static func cropRectForDisplay(_ globalRect: CGRect, displayBounds: CGRect) -> CGRect {
+        let localX = globalRect.minX - displayBounds.minX
+        let topLeftY = globalRect.minY - displayBounds.minY
+        let bottomLeftY = displayBounds.height - (topLeftY + globalRect.height)
+        return CGRect(x: localX, y: bottomLeftY, width: globalRect.width, height: globalRect.height)
+    }
 
+    public static func resolve(displayIndex: Int?, windowQuery: String?, region: CGRect?) throws -> ResolvedTarget {
         // WINDOW
         if let query = windowQuery {
-            guard let win = content.windows.first(where: { w in
-                (w.owningApplication?.applicationName.localizedCaseInsensitiveContains(query) ?? false)
-                || String(w.windowID) == query
-            }) else { throw ResolveError.noWindow }
-            let rect = win.frame
-            let displayID = content.displays.first(where: { $0.frame.intersects(rect) })?.displayID
-                ?? CGMainDisplayID()
-            let s = scale(for: displayID, pointWidth: content.displays.first(where: { $0.displayID == displayID })?.frame.width ?? rect.width)
-            let filter = SCContentFilter(desktopIndependentWindow: win)
-            let cfg = config(pixelWidth: Int(rect.width * s), pixelHeight: Int(rect.height * s))
-            return ResolvedTarget(kind: "window", displayID: displayID, captureRectPoints: rect,
-                                  scale: s, cropPixels: nil, filter: filter, configuration: cfg)
+            let list = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]) ?? []
+            guard let bounds = WindowFinder.selectBounds(in: list, matching: query) else { throw ResolveError.noWindow }
+            let did = activeDisplays().first(where: { CGDisplayBounds($0).intersects(bounds) }) ?? CGMainDisplayID()
+            let dRect = CGDisplayBounds(did)
+            let s = scale(for: did, pointWidth: dRect.width)
+            return ResolvedTarget(kind: "window", displayID: did, captureRectPoints: bounds, scale: s,
+                                  cropRect: cropRectForDisplay(bounds, displayBounds: dRect))
         }
 
-        // pick display (index into content.displays, default main)
-        let display: SCDisplay
+        // DISPLAY selection (index into active displays; default main)
+        let displays = activeDisplays()
+        let did: CGDirectDisplayID
         if let idx = displayIndex {
-            guard idx >= 0, idx < content.displays.count else { throw ResolveError.noDisplay }
-            display = content.displays[idx]
+            guard idx >= 0, idx < displays.count else { throw ResolveError.noDisplay }
+            did = displays[idx]
         } else {
-            guard let main = content.displays.first(where: { $0.displayID == CGMainDisplayID() })
-                ?? content.displays.first else { throw ResolveError.noDisplay }
-            display = main
+            did = CGMainDisplayID()
         }
-        let dRect = display.frame
-        let s = scale(for: display.displayID, pointWidth: dRect.width)
-        let filter = SCContentFilter(display: display, excludingWindows: [])
+        let dRect = CGDisplayBounds(did)
+        let s = scale(for: did, pointWidth: dRect.width)
 
-        // REGION (crop the full-display capture to the region in pixels)
+        // REGION
         if let region = region {
             guard dRect.contains(region) else { throw ResolveError.badRegion }
-            let cfg = config(pixelWidth: Int(dRect.width * s), pixelHeight: Int(dRect.height * s))
-            let cropPixels = CGRect(x: (region.minX - dRect.minX) * s,
-                                    y: (region.minY - dRect.minY) * s,
-                                    width: region.width * s, height: region.height * s)
-            return ResolvedTarget(kind: "region", displayID: display.displayID,
-                                  captureRectPoints: region, scale: s, cropPixels: cropPixels,
-                                  filter: filter, configuration: cfg)
+            return ResolvedTarget(kind: "region", displayID: did, captureRectPoints: region, scale: s,
+                                  cropRect: cropRectForDisplay(region, displayBounds: dRect))
         }
 
         // FULL DISPLAY
-        let cfg = config(pixelWidth: Int(dRect.width * s), pixelHeight: Int(dRect.height * s))
-        return ResolvedTarget(kind: "display", displayID: display.displayID,
-                              captureRectPoints: dRect, scale: s, cropPixels: nil,
-                              filter: filter, configuration: cfg)
+        return ResolvedTarget(kind: "display", displayID: did, captureRectPoints: dRect, scale: s, cropRect: nil)
     }
 }

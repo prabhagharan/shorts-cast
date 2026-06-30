@@ -42,7 +42,7 @@ Task {
     // The top-level #available guard does not propagate into this async closure.
     guard #available(macOS 12.3, *) else { exit(1) }
     do {
-        let target = try await TargetResolver.resolve(
+        let target = try TargetResolver.resolve(
             displayIndex: options.displayIndex,
             windowQuery: options.windowQuery,
             region: options.region)
