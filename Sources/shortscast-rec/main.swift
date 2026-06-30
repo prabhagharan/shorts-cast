@@ -26,6 +26,7 @@ guard status.allGranted else {
     var msg = "Missing permissions. Enable in System Settings > Privacy & Security:\n"
     if !status.screenRecording { msg += "  • Screen Recording\n" }
     if !status.accessibility { msg += "  • Accessibility\n" }
+    if !status.inputMonitoring { msg += "  • Input Monitoring\n" }
     fail(msg)
 }
 
