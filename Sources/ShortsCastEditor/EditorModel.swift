@@ -48,10 +48,10 @@ public final class EditorModel: ObservableObject {
         regenerate()
     }
 
-    func regenerate() {
+    private func regenerate() {
         guard let log = eventLog else { return }
         result = Director(settings: settings).direct(log: log, overrides: overrides)
     }
 
-    func invalidateCompositor() { cachedCompositor = nil }
+    private func invalidateCompositor() { cachedCompositor = nil }
 }
