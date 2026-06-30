@@ -28,6 +28,8 @@ public final class AVScreenCaptureSession: NSObject, AVCaptureVideoDataOutputSam
         self.cropRect = cropRect; self.pixelSize = pixelSize
     }
 
+    deinit { session.stopRunning() }
+
     private func makeWriter() throws {
         let w = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
         let settings: [String: Any] = [
@@ -51,7 +53,6 @@ public final class AVScreenCaptureSession: NSObject, AVCaptureVideoDataOutputSam
         if let crop = cropRect { screenInput.cropRect = crop }
 
         session.beginConfiguration()
-        session.sessionPreset = .high
         guard session.canAddInput(screenInput) else { session.commitConfiguration(); throw CaptureError.cannotAddInput }
         session.addInput(screenInput)
         let out = AVCaptureVideoDataOutput()
@@ -86,7 +87,7 @@ public final class AVScreenCaptureSession: NSObject, AVCaptureVideoDataOutputSam
               let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         if writer.status == .unknown {
-            writer.startWriting()
+            guard writer.startWriting() else { writerError = writer.error ?? CaptureError.writerSetupFailed; return }
             writer.startSession(atSourceTime: pts)
             firstFramePTSSeconds = CMTimeGetSeconds(pts)
         }

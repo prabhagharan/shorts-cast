@@ -7,8 +7,8 @@ public func machTicksToSeconds(_ ticks: UInt64, numer: UInt32, denom: UInt32) ->
     return nanos / 1_000_000_000.0
 }
 
-/// Live monotonic clock in seconds, on the same timeline as ScreenCaptureKit
-/// sample presentation timestamps (both derive from the mach host clock).
+/// Live monotonic clock in seconds, on the same timeline as AVFoundation capture sample timestamps
+/// (both derive from the mach host clock).
 public func machNowSeconds() -> Double {
     var info = mach_timebase_info_data_t()
     mach_timebase_info(&info)

@@ -31,9 +31,7 @@ guard status.allGranted else {
 
 let createdISO = ISO8601DateFormatter().string(from: Date())
 
-// ScreenCaptureKit needs a live main run loop to deliver frames, so we must NOT
-// block the main thread. Run the recording on a Task and keep the main run loop
-// alive with CFRunLoopRun(); the Task calls exit() when done.
+// Run the recording on a Task and keep the process alive with CFRunLoopRun() until the Task calls exit(); AVFoundation delivers frames on its own queue.
 Task {
     do {
         let target = try TargetResolver.resolve(

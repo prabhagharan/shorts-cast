@@ -43,9 +43,11 @@ public enum TargetResolver {
             guard let bounds = WindowFinder.selectBounds(in: list, matching: query) else { throw ResolveError.noWindow }
             let did = activeDisplays().first(where: { CGDisplayBounds($0).intersects(bounds) }) ?? CGMainDisplayID()
             let dRect = CGDisplayBounds(did)
+            let clamped = bounds.intersection(dRect)
+            guard !clamped.isNull, clamped.width >= 1, clamped.height >= 1 else { throw ResolveError.noWindow }
             let s = scale(for: did, pointWidth: dRect.width)
-            return ResolvedTarget(kind: "window", displayID: did, captureRectPoints: bounds, scale: s,
-                                  cropRect: cropRectForDisplay(bounds, displayBounds: dRect))
+            return ResolvedTarget(kind: "window", displayID: did, captureRectPoints: clamped, scale: s,
+                                  cropRect: cropRectForDisplay(clamped, displayBounds: dRect))
         }
 
         // DISPLAY selection (index into active displays; default main)
