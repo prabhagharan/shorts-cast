@@ -11,7 +11,8 @@ public struct AutoDirector {
                            duration: Seconds,
                            screenSize: CGSize) -> CameraPath {
         let rest = CameraState(
-            center: CGPoint(x: screenSize.width / 2, y: screenSize.height / 2),
+            center: CGPoint(x: screenSize.width * settings.restingAnchor.x,
+                            y: screenSize.height * settings.restingAnchor.y),
             scale: settings.restingZoom)
 
         var kfs: [CameraKeyframe] = [CameraKeyframe(t: 0, center: rest.center, scale: rest.scale)]
@@ -35,8 +36,12 @@ public struct AutoDirector {
             // Only return to resting when there is room to complete the zoom-out
             // before the next segment begins; otherwise stay zoomed and pan.
             if gap > settings.inactivityTimeout + settings.zoomOutDuration {
+                // Zoom out in place (keep the focus position) or pull back to the resting anchor.
+                let out = settings.zoomOutInPlace
+                    ? CameraState(center: seg.center, scale: settings.restingZoom)
+                    : rest
                 push(seg.end + settings.inactivityTimeout, target)    // hold, then
-                push(seg.end + settings.inactivityTimeout + settings.zoomOutDuration, rest) // zoom out
+                push(seg.end + settings.inactivityTimeout + settings.zoomOutDuration, out) // zoom out
             }
             // else: stay zoomed; the next segment pans/zooms from `current`.
         }
