@@ -15,11 +15,18 @@ struct ShortsCastApp: App {
 
 struct RootView: View {
     @ObservedObject var model: EditorModel
+    @State private var currentTime: Double = 0
+    @State private var errorMessage: String?
+
     var body: some View {
         VStack(spacing: 0) {
-            Text("ShortsCast — open a recording to begin")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .foregroundColor(.secondary)
+            ToolbarView(model: model, currentTime: $currentTime, errorMessage: $errorMessage)
+            Divider()
+            PreviewView(model: model, currentTime: $currentTime)
         }
+        .alert("Error", isPresented: Binding(get: { errorMessage != nil },
+                                             set: { if !$0 { errorMessage = nil } })) {
+            Button("OK", role: .cancel) { errorMessage = nil }
+        } message: { Text(errorMessage ?? "") }
     }
 }
