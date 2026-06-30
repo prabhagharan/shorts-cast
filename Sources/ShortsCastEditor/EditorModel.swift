@@ -62,8 +62,13 @@ public final class EditorModel: ObservableObject {
     }
 
     public func setZoom(segment index: Int, zoom: CGFloat) {
-        overrides.removeAll { $0.index == index }
-        overrides.append(SegmentOverride(index: index, zoom: zoom))
+        overrides = upsertOverride(overrides, index: index, zoom: zoom, center: nil)
+        regenerate()
+    }
+
+    /// Overrides where the given segment focuses (pan target), in screen pixels.
+    public func setCenter(segment index: Int, center: CGPoint) {
+        overrides = upsertOverride(overrides, index: index, zoom: nil, center: center)
         regenerate()
     }
 

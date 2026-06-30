@@ -35,12 +35,22 @@ struct InspectorView: View {
             Section("Auto-zoom") {
                 zoomSlider("Default ×", \.defaultZoom, 1...5)
                 zoomSlider("Max ×", \.maxZoom, 1...6)
+                Toggle("Zoom out in place", isOn: Binding(
+                    get: { model.settings.zoomOutInPlace },
+                    set: { model.settings.zoomOutInPlace = $0 }))
+                Text("Resting framing").font(.caption).foregroundColor(.secondary)
+                anchorSlider("X", \.x)
+                anchorSlider("Y", \.y)
             }
             if let sel = model.selectedSegment, sel < model.segments.count {
                 Section("Selected segment") {
+                    Text("Zoom ×")
                     Slider(value: Binding(
                         get: { Double(model.segments[sel].zoom) },
                         set: { model.setZoom(segment: sel, zoom: CGFloat($0)) }), in: 1...6)
+                    Text("Focus point")
+                    centerSlider("X", sel, \.x, model.screenSize.width)
+                    centerSlider("Y", sel, \.y, model.screenSize.height)
                     Button("Reset") { model.clearOverride(segment: sel) }
                 }
             }
@@ -77,5 +87,21 @@ struct InspectorView: View {
     private func zoomSlider(_ label: String, _ key: WritableKeyPath<AutoDirectorSettings, CGFloat>, _ range: ClosedRange<Double>) -> some View {
         Slider(value: Binding(get: { Double(model.settings[keyPath: key]) },
                               set: { model.settings[keyPath: key] = CGFloat($0) }), in: range) { Text(label) }
+    }
+    // Normalized 0…1 resting-anchor component.
+    private func anchorSlider(_ label: String, _ comp: WritableKeyPath<CGPoint, CGFloat>) -> some View {
+        Slider(value: Binding(get: { Double(model.settings.restingAnchor[keyPath: comp]) },
+                              set: { model.settings.restingAnchor[keyPath: comp] = CGFloat($0) }), in: 0...1) { Text(label) }
+    }
+    // Selected segment's focus point (screen pixels) along one axis.
+    private func centerSlider(_ label: String, _ sel: Int,
+                              _ comp: WritableKeyPath<CGPoint, CGFloat>, _ maxV: CGFloat) -> some View {
+        Slider(value: Binding(
+            get: { Double(model.segments[sel].center[keyPath: comp]) },
+            set: {
+                var c = model.segments[sel].center
+                c[keyPath: comp] = CGFloat($0)
+                model.setCenter(segment: sel, center: c)
+            }), in: 0...Double(max(maxV, 1))) { Text(label) }
     }
 }
