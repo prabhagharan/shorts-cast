@@ -4,6 +4,7 @@ import AVFoundation
 import CoreMedia
 import CoreVideo
 import CoreGraphics
+import ShortsCastCore
 
 /// Captures a display (optionally cropped) via AVCaptureScreenInput and writes H.264 .mov,
 /// anchoring t=0 on the first frame. Replaces the ScreenCaptureKit session.
@@ -35,7 +36,11 @@ public final class AVScreenCaptureSession: NSObject, AVCaptureVideoDataOutputSam
         let settings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: Int(pixelSize.width),
-            AVVideoHeightKey: Int(pixelSize.height)
+            AVVideoHeightKey: Int(pixelSize.height),
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: VideoQuality.bitrate(for: pixelSize),
+                AVVideoMaxKeyFrameIntervalKey: 60
+            ]
         ]
         let i = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
         i.expectsMediaDataInRealTime = true

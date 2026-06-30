@@ -5,10 +5,15 @@ import ShortsCastEditor
 import ShortsCastCore
 
 struct ExportSheet: View {
+    // Resolution multipliers applied to each format's base export size.
+    private static let scales: [(label: String, factor: CGFloat)] =
+        [("Standard (1×)", 1), ("High (1.5×)", 1.5), ("Max (2×)", 2)]
+
     @ObservedObject var model: EditorModel
     @Binding var isPresented: Bool
     @Binding var errorMessage: String?
     @State private var selected: Set<String> = []
+    @State private var scaleIndex = 0
     @State private var exporting = false
 
     var body: some View {
@@ -18,6 +23,9 @@ struct ExportSheet: View {
                 Toggle(fmt.name, isOn: Binding(
                     get: { selected.contains(fmt.name) },
                     set: { if $0 { selected.insert(fmt.name) } else { selected.remove(fmt.name) } }))
+            }
+            Picker("Resolution", selection: $scaleIndex) {
+                ForEach(Self.scales.indices, id: \.self) { Text(Self.scales[$0].label).tag($0) }
             }
             HStack {
                 Button("Cancel") { isPresented = false }.disabled(exporting)
@@ -32,7 +40,8 @@ struct ExportSheet: View {
     }
 
     private func startExport() {
-        let formats = OutputFormat.all.filter { selected.contains($0.name) }
+        let factor = Self.scales[scaleIndex].factor
+        let formats = OutputFormat.all.filter { selected.contains($0.name) }.map { $0.scaled(by: factor) }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true; panel.canChooseFiles = false
         panel.message = "Choose an output folder"

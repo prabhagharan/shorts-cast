@@ -26,7 +26,11 @@ public enum VideoExporter {
         let writerInput = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: Int(format.exportSize.width),
-            AVVideoHeightKey: Int(format.exportSize.height)
+            AVVideoHeightKey: Int(format.exportSize.height),
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: VideoQuality.bitrate(for: format.exportSize),
+                AVVideoMaxKeyFrameIntervalKey: 60
+            ]
         ])
         writerInput.expectsMediaDataInRealTime = false
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: writerInput,

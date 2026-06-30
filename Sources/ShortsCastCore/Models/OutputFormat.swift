@@ -14,6 +14,18 @@ public struct OutputFormat: Equatable, Codable {
     /// width / height
     public var aspectRatio: CGFloat { aspect.width / aspect.height }
 
+    /// Same aspect, `exportSize` multiplied by `factor` and rounded up to even
+    /// dimensions (H.264 requires even width/height).
+    public func scaled(by factor: CGFloat) -> OutputFormat {
+        func evenDim(_ v: CGFloat) -> CGFloat {
+            let n = (v * factor).rounded()
+            return n.truncatingRemainder(dividingBy: 2) == 0 ? n : n + 1
+        }
+        return OutputFormat(name: name, aspect: aspect,
+                            exportSize: CGSize(width: evenDim(exportSize.width),
+                                               height: evenDim(exportSize.height)))
+    }
+
     public static let vertical9x16 = OutputFormat(
         name: "9:16", aspect: CGSize(width: 9, height: 16),
         exportSize: CGSize(width: 1080, height: 1920))
