@@ -13,6 +13,16 @@ public enum Permissions {
             self.inputMonitoring = inputMonitoring
         }
         public var allGranted: Bool { screenRecording && accessibility && inputMonitoring }
+
+        /// Display names of the permissions that are not yet granted, in the order
+        /// they appear in System Settings. Empty when `allGranted`.
+        public var missingNames: [String] {
+            var names: [String] = []
+            if !screenRecording { names.append("Screen Recording") }
+            if !accessibility { names.append("Accessibility") }
+            if !inputMonitoring { names.append("Input Monitoring") }
+            return names
+        }
     }
 
     public static func status() -> Status {

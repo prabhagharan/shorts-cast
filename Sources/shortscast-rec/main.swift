@@ -21,13 +21,10 @@ do {
 }
 
 Permissions.request()
-let status = Permissions.status()
-guard status.allGranted else {
-    var msg = "Missing permissions. Enable in System Settings > Privacy & Security:\n"
-    if !status.screenRecording { msg += "  • Screen Recording\n" }
-    if !status.accessibility { msg += "  • Accessibility\n" }
-    if !status.inputMonitoring { msg += "  • Input Monitoring\n" }
-    fail(msg)
+let missing = Permissions.status().missingNames
+guard missing.isEmpty else {
+    let lines = missing.map { "  • \($0)" }.joined(separator: "\n")
+    fail("Missing permissions. Enable in System Settings > Privacy & Security:\n" + lines)
 }
 
 let createdISO = ISO8601DateFormatter().string(from: Date())

@@ -27,6 +27,20 @@ struct RecordSheet: View {
     }
 
     private func start() {
+        // Auto-zoom is driven by click/key/scroll events captured via CGEventTap,
+        // which macOS gates behind Accessibility + Input Monitoring (Screen Recording
+        // covers only the video). Without them the recording captures video but no
+        // input events, so nothing zooms. Request, then refuse to waste a capture if
+        // anything is still missing.
+        Permissions.request()
+        let missing = Permissions.status().missingNames
+        guard missing.isEmpty else {
+            errorMessage = "Recording needs these permissions (System Settings > "
+                + "Privacy & Security): " + missing.joined(separator: ", ")
+                + ". Grant them, then quit and reopen ShortsCast and record again."
+            return
+        }
+
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "recording.shortscast"
         panel.message = "Save the recording bundle"
