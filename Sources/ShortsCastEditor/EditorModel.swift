@@ -73,6 +73,21 @@ public final class EditorModel: ObservableObject {
 
     private func invalidateCompositor() { cachedCompositor = nil }
 
+    private func currentCompositor() -> FrameCompositor {
+        if let c = cachedCompositor { return c }
+        let c = FrameCompositor(style: style, format: format, screenSize: screenSize)
+        cachedCompositor = c
+        return c
+    }
+
+    public func previewImage(at t: Seconds) -> CGImage? {
+        guard let result = result, let source = frameSource?.image(at: t) else { return nil }
+        let crop = Director(settings: settings).cropRect(result, at: t, format: format, screen: screenSize)
+        let comp = currentCompositor()
+        let composed = comp.composite(source: source, crop: crop, time: t, cursor: result.cursor)
+        return comp.context.createCGImage(composed, from: CGRect(origin: .zero, size: format.exportSize))
+    }
+
     public func currentEdits() -> ProjectEdits {
         ProjectEdits(overrides: overrides, style: style, formatName: format.name, settings: settings)
     }
