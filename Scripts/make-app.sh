@@ -96,3 +96,29 @@ PLIST
 codesign --force --deep --sign "$SIGN" "$APP"
 echo "Built $APP"
 echo "Launch the editor: open $APP"
+
+# --- MCP server (background helper; frame delivery needs a signed .app) ---
+APP="$ROOT/.build/ShortsCastMCP.app"
+rm -rf "$APP"
+mkdir -p "$APP/Contents/MacOS"
+cp "$BIN/shortscast-mcp" "$APP/Contents/MacOS/shortscast-mcp"
+cat > "$APP/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>com.shortscast.mcp</string>
+  <key>CFBundleName</key><string>ShortsCastMCP</string>
+  <key>CFBundleExecutable</key><string>shortscast-mcp</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSMinimumSystemVersion</key><string>12.3</string>
+  <key>LSUIElement</key><true/>
+</dict>
+</plist>
+PLIST
+codesign --force --deep --sign "$SIGN" "$APP"
+echo "Built $APP"
+echo "Grant it Screen Recording, Accessibility, Input Monitoring, then point your MCP client at:"
+echo "  $APP/Contents/MacOS/shortscast-mcp"

@@ -1,4 +1,6 @@
 import Foundation
+import ShortsCastCapture
+import ShortsCastCore
 
 public enum ShortsCastMCP {
     /// Read one JSON-RPC line at a time, dispatch, and write responses. Returns when
@@ -61,6 +63,24 @@ public extension ShortsCastMCP {
     static func allTools() -> [MCPTool] {
         [ MCPTool(name: "ping", description: "Health check; returns pong.",
                   inputSchema: .object(["type": .string("object"), "properties": .object([:])])) { _ in
-            ToolResult(text: "pong", isError: false) } ]
+            ToolResult(text: "pong", isError: false) },
+        MCPTool(name: "capture_test",
+                description: "Spike: record 2s of the main display to a temp bundle.",
+                inputSchema: .object(["type": .string("object"), "properties": .object([:])])) { _ in
+            do {
+                Permissions.request()
+                let missing = Permissions.status().missingNames
+                guard missing.isEmpty else { return ToolResult(text: "Missing: \(missing)", isError: true) }
+                let target = try TargetResolver.resolve(displayIndex: nil, windowQuery: nil, region: nil)
+                let out = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("spike-\(UUID().uuidString).shortscast")
+                let iso = ISO8601DateFormatter().string(from: Date())
+                let r = try await Recorder.record(target: target, seconds: 2, outBundle: out,
+                                                  appVersion: ShortsCastCapture.version, createdISO: iso)
+                return ToolResult(text: "Wrote \(r.bundleURL.path), events=\(r.eventLog.events.count)", isError: false)
+            } catch {
+                return ToolResult(text: "capture failed: \(error)", isError: true)
+            }
+        } ]
     }
 }
