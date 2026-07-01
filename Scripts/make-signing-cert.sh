@@ -20,6 +20,11 @@ fi
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
+# Use the system LibreSSL, not a Homebrew/MacPorts OpenSSL 3 that may be first on
+# PATH: OpenSSL 3's `pkcs12 -export` writes a MAC that macOS `security import`
+# can't verify ("MAC verification failed"). LibreSSL emits a compatible p12.
+OSSL=/usr/bin/openssl
+
 # openssl config (works with macOS's LibreSSL, which lacks `req -addext`).
 cat > "$TMP/cs.cnf" <<EOF
 [req]
@@ -34,13 +39,16 @@ keyUsage = critical,digitalSignature
 extendedKeyUsage = critical,codeSigning
 EOF
 
-openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+"$OSSL" req -x509 -newkey rsa:2048 -nodes -days 3650 \
   -keyout "$TMP/key.pem" -out "$TMP/cert.pem" -config "$TMP/cs.cnf"
-openssl pkcs12 -export -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
-  -out "$TMP/id.p12" -passout pass:
+# Use a (throwaway) non-empty password: `security import` fails MAC verification
+# on an empty-password p12. The p12 is deleted immediately, so the value is moot.
+P12PW="shortscast-temp"
+"$OSSL" pkcs12 -export -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
+  -out "$TMP/id.p12" -passout "pass:$P12PW"
 
 # Import the key+cert and pre-authorize codesign to use the private key.
-security import "$TMP/id.p12" -k "$KEYCHAIN" -P "" -T /usr/bin/codesign
+security import "$TMP/id.p12" -k "$KEYCHAIN" -P "$P12PW" -T /usr/bin/codesign
 
 if security find-identity -p codesigning 2>/dev/null | grep -q "$NAME"; then
   echo
