@@ -24,12 +24,17 @@ ARCH_FLAGS=(--arch arm64 --arch x86_64)
 swift build -c release "${ARCH_FLAGS[@]}"
 BIN="$(swift build -c release "${ARCH_FLAGS[@]}" --show-bin-path)"
 
+VERSION="${SHORTSCAST_VERSION:-0.1.0}"
+
 # Sign with a STABLE identity so macOS keeps the app's permission (TCC) grants —
 # Screen Recording, Accessibility, Input Monitoring — across rebuilds. Ad-hoc
 # signing (--sign -) changes the code identity every build, so macOS forgets the
 # grants and re-prompts. Create the identity once: ./Scripts/make-signing-cert.sh
 SIGN_ID="${SHORTSCAST_SIGN_ID:-ShortsCast Dev}"
-if security find-identity -p codesigning 2>/dev/null | grep -q "$SIGN_ID"; then
+if [ "$SIGN_ID" = "-" ]; then
+  SIGN="-"
+  echo "Signing ad-hoc (release mode)."
+elif security find-identity -p codesigning 2>/dev/null | grep -q "$SIGN_ID"; then
   SIGN="$SIGN_ID"
   echo "Signing with stable identity: $SIGN_ID"
 else
@@ -44,7 +49,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN/shortscast-rec" "$APP/Contents/MacOS/shortscast-rec"
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -53,7 +58,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleName</key><string>ShortsCastRec</string>
   <key>CFBundleExecutable</key><string>shortscast-rec</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>12.3</string>
   <key>LSUIElement</key><true/>
@@ -73,7 +78,7 @@ APP="$ROOT/.build/ShortsCastApp.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN/shortscast-app" "$APP/Contents/MacOS/shortscast-app"
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -82,7 +87,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleName</key><string>ShortsCast</string>
   <key>CFBundleExecutable</key><string>shortscast-app</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
 </dict>
