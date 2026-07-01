@@ -14,6 +14,8 @@ Works on macOS 12 or later.
 4. Open  **System Settings → Privacy & Security**. Scroll down to the **Security**
    section — you'll see *"ShortsCast was blocked to protect your Mac."* Click
    **Open Anyway**, then confirm with your password or Touch ID.
+   (On macOS 12 Monterey / 13 Ventura the path is **System Preferences → Security &
+   Privacy → General → Open Anyway** instead.)
 5. ShortsCast opens. You only need to do steps 3–4 once.
 
 ## Grant permissions (first launch)

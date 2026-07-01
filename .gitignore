@@ -1,5 +1,6 @@
 .superpowers/
 .build/
+ShortsCast-*-macOS.zip
 .DS_Store
 *.xcodeproj
 .swiftpm/
