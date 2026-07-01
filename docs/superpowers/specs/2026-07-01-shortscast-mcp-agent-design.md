@@ -12,6 +12,11 @@ scenario is **the agent recording its own work**: it starts capture, performs
 an open-ended task, then stops, so recording duration equals task length rather
 than a fixed `--seconds`.
 
+It also supports a **feedback loop**: after an export the user speaks in plain
+language ("zoom tighter on that click", "everything zooms too hard", "use a
+lighter background"), the agent maps that onto per-segment / global-director /
+style edits, re-exports, and the user reacts again.
+
 Because Claude Desktop can only reach external tools via **MCP**, the interface
 is an MCP server. The same server also works for Claude Code.
 
@@ -56,7 +61,7 @@ AVFoundation delivers frames on its own queue. The server must keep a run loop
 alive for the event tap without blocking the MCP stdio loop. Resolve concretely
 during the permissions spike (below).
 
-## Tool surface (8 tools)
+## Tool surface (10 tools)
 
 | Tool | Params | Returns |
 |---|---|---|
@@ -66,6 +71,8 @@ during the permissions spike (below).
 | `list_recordings` | — | recent bundles + exports: path, timestamp, duration |
 | `list_segments` | `bundle` (optional, defaults to most recent) | per-segment: `index`, `start`, `end`, `zoom`, `center` {x,y}, ease durations, and an **event-derived `summary`** |
 | `set_segment_camera` | `bundle` (optional), `index`, any of `zoom`, `center`, `zoom_in_duration`, `zoom_out_duration` | updated segment |
+| `set_director_settings` | `bundle` (optional), partial patch of any `AutoDirectorSettings` field(s) | applied settings + `segments_changed` flag + old→new segment count + fresh `list_segments` when a **resegmenting** field changed (see below) |
+| `set_style` | `bundle` (optional), partial patch of any `RenderStyle` field(s) | applied style (never resegments) |
 | `export_recording` | `bundle` (optional), `auto_direct` (default true), `format`/`quality` (default vertical 9:16) | `mp4_path` |
 | `open_in_app` | `bundle` (optional) | launches `shortscast-app` on the bundle |
 
@@ -88,30 +95,79 @@ stop_recording  → controller.stop() writes the .shortscast bundle
                 → Director.direct(log, overrides: []) → cache focus segments
                 → return {bundle_path, duration, event_count, segment_count}
 
-list_segments        → cached segments + event-derived summary per segment
-set_segment_camera   → upsertOverride(...) into the session's ProjectEdits,
-                       AND write project.json into the bundle (GUI parity)
-export_recording     → load overrides from project.json → ExportJob.run(overrides:)
-open_in_app          → NSWorkspace launches shortscast-app on the bundle
+list_segments         → cached segments + event-derived summary per segment
+set_segment_camera    → upsertOverride(...) into the session's ProjectEdits,
+                        AND write project.json into the bundle (GUI parity)
+set_director_settings → patch ProjectEdits.settings, write project.json, re-direct;
+                        if a resegmenting field changed, return fresh list_segments
+set_style             → patch ProjectEdits.style, write project.json (no re-direct)
+export_recording      → load overrides+settings+style from project.json →
+                        ExportJob.run(settings:style:overrides:)
+open_in_app           → NSWorkspace launches shortscast-app on the bundle
 ```
 
-## Camera control (Level 1 — no engine changes)
+## Tuning & feedback (Level 1 — no engine changes)
 
-Post-recording only. `FocusSegment` already carries `center`, `zoom`,
-`zoomInDuration?`, `zoomOutDuration?`, and `SegmentOverride` /
-`upsertOverride` / `applyOverrides` already implement per-segment edits.
-`set_segment_camera` is a thin wrapper over `upsertOverride`.
+Post-recording only. Three levels of tuning, all backed by existing structures
+(`ProjectEdits` = `overrides` + `settings` + `style`) that `ExportJob.run`
+already consumes — so none of this touches Core/Render logic:
 
-**Overrides persist into the bundle.** On each `set_segment_camera`, the server
-writes the session's `ProjectEdits` (`overrides`, `style`, `formatName`,
-`settings`) to the bundle's `project.json` — the same structure the GUI editor
-reads. On `export_recording`, the server loads those overrides and passes them
-into `ExportJob.run(overrides:)` (which does **not** auto-read `project.json`).
-Result: `export_recording`, `open_in_app`, and the GUI all agree on the camera
-edits, and a human can pick up in the app where the agent left off.
+1. **Per-segment** — `set_segment_camera`, a thin wrapper over `upsertOverride`
+   on `SegmentOverride` (`center`, `zoom`, `zoomInDuration?`, `zoomOutDuration?`).
+2. **Global director feel** — `set_director_settings`, a partial patch over
+   `AutoDirectorSettings`. Uses the type's existing tolerant per-field decoding,
+   so the agent sends only the fields it wants (e.g. "too fast" → raise
+   `zoomInDuration`/`zoomOutDuration`; "less aggressive" → lower `defaultZoom`).
+3. **Look** — `set_style`, a partial patch over `RenderStyle` (background,
+   `paddingFraction`, `cornerRadius`, shadow, cursor…).
+
+**Everything persists into the bundle.** Each setter writes the session's
+`ProjectEdits` to the bundle's `project.json` — the same structure the GUI editor
+reads. `export_recording` loads it and passes `settings:`, `style:`, and
+`overrides:` into `ExportJob.run` (which does **not** auto-read `project.json`).
+Result: export, `open_in_app`, and the GUI all agree, and a human can pick up in
+the app where the agent left off.
 
 Camera vocabulary is 2D: **where it looks** (`center`), **how tight** (`zoom`),
 **how fast** (`zoomInDuration`/`zoomOutDuration`). There is no 3D tilt/angle.
+
+### Precedence & the index-drift caveat
+
+At export the pipeline is:
+
+```
+clustered = EventClusterer(settings).segments(from: log)   ← settings shape segmentation
+dwell     = DwellDetector(settings).segments(from: log)    ← settings shape segmentation
+combined  = mergeNonOverlapping(clustered, dwell)          ← ordered segment list
+segments  = applyOverrides(combined, overrides)            ← per-segment edits patched LAST, by index
+path      = AutoDirector(settings).cameraPath(segments…)   ← easing uses seg.value ?? settings.value
+```
+
+- **Per-segment overrides win** for whatever fields they set: `applyOverrides`
+  runs last (`seg.zoom = override.zoom`), and easing falls back
+  `seg.zoomInDuration ?? settings.zoomInDuration`. So a global
+  `set_director_settings` only moves the segments/fields the user has **not**
+  pinned. Pinning segment 3 to 2.8× survives a later global `defaultZoom` drop.
+- **Index drift** is the one caveat: overrides are keyed by segment **index**, and
+  a subset of settings control **segmentation itself**. Changing those can change
+  the number/order of segments, so an indexed override may attach to a different
+  moment — not the global *overriding* the edit, but the edit's *target shifting*.
+
+**Field classification (the server enforces this):**
+
+- **Resegmenting** (may change segment count/order): `clusterTimeGap`,
+  `clusterRadius`, `dwellTime`, `dwellRadius`, `denseEventCount`, `clickWeight`,
+  `keyWeight`, `scrollWeight`.
+- **Safe / feel-only** (never resegment): `defaultZoom`, `maxZoom`, `restingZoom`,
+  `inactivityTimeout`, `zoomInDuration`, `zoomOutDuration`, `dwellZoom`,
+  `denseZoomBonus`, `restingAnchor`, `zoomOutInPlace`, and all `RenderStyle`
+  fields.
+
+**Mitigation:** when `set_director_settings` patches any resegmenting field, the
+server re-directs and returns `segments_changed: true`, the old→new segment
+count, and the fresh `list_segments` — so drift is immediately visible and the
+agent/user can re-verify the per-segment overrides. Safe-field patches return
+`segments_changed: false`.
 
 ## Event-derived segment summary
 
@@ -166,9 +222,15 @@ low-risk; de-risk this first before building the full tool surface.
   stop-with-none → error, defaulting to active / most-recent bundle.
 - `target` spec → `TargetResolver` mapping.
 - `set_segment_camera` → `upsertOverride` and `project.json` round-trip.
+- `set_director_settings` / `set_style` → partial-patch semantics (unset fields
+  preserved), `project.json` round-trip.
+- **Field classification**: `set_director_settings` on a resegmenting field
+  returns `segments_changed: true` + fresh segments; on a safe field returns
+  `segments_changed: false`. Assert the classification table explicitly.
 - `list_segments` event-derived summary: given a synthetic `EventLog`, assert the
   counts/wording per segment window.
-- Export default wiring (format, overrides passed through).
+- Export wiring: `settings`, `style`, and `overrides` all loaded from
+  `project.json` and passed through to `ExportJob.run`.
 
 Capture, render, and director code is already covered by existing tests; the MCP
 layer tests the request→library-call mapping and the state machine.
@@ -177,7 +239,7 @@ layer tests the request→library-call mapping and the state machine.
 the same "live-verified" approach the capture layer already relies on (screen
 capture cannot be unit-tested).
 
-**Config smoke test:** register the server in a client and confirm all 8 tools
+**Config smoke test:** register the server in a client and confirm all 10 tools
 list and a trivial call (`recording_status`) responds.
 
 ## Implementation order (suggested)
@@ -188,5 +250,7 @@ list and a trivial call (`recording_status`) responds.
    `list_recordings`.
 3. `list_segments` with event-derived summary.
 4. `set_segment_camera` + `project.json` persistence + `export_recording`.
-5. `open_in_app`.
-6. Packaging/signing + client config + `INSTALL.md`.
+5. `set_director_settings` (with field classification + drift response) +
+   `set_style`.
+6. `open_in_app`.
+7. Packaging/signing + client config + `INSTALL.md`.
