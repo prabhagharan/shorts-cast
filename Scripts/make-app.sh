@@ -24,6 +24,21 @@ ARCH_FLAGS=(--arch arm64 --arch x86_64)
 swift build -c release "${ARCH_FLAGS[@]}"
 BIN="$(swift build -c release "${ARCH_FLAGS[@]}" --show-bin-path)"
 
+# Sign with a STABLE identity so macOS keeps the app's permission (TCC) grants —
+# Screen Recording, Accessibility, Input Monitoring — across rebuilds. Ad-hoc
+# signing (--sign -) changes the code identity every build, so macOS forgets the
+# grants and re-prompts. Create the identity once: ./Scripts/make-signing-cert.sh
+SIGN_ID="${SHORTSCAST_SIGN_ID:-ShortsCast Dev}"
+if security find-identity -p codesigning 2>/dev/null | grep -q "$SIGN_ID"; then
+  SIGN="$SIGN_ID"
+  echo "Signing with stable identity: $SIGN_ID"
+else
+  SIGN="-"
+  echo "warning: no '$SIGN_ID' code-signing identity found — signing ad-hoc."
+  echo "         macOS will re-ask for permissions on every rebuild."
+  echo "         Run ./Scripts/make-signing-cert.sh once to stop the re-prompts."
+fi
+
 APP="$ROOT/.build/ShortsCastRec.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
@@ -46,7 +61,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-codesign --force --deep --sign - "$APP"
+codesign --force --deep --sign "$SIGN" "$APP"
 
 echo "Built $APP"
 echo "Grant it Screen Recording (System Settings > Privacy & Security > Screen Recording > +),"
@@ -73,6 +88,6 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
-codesign --force --deep --sign - "$APP"
+codesign --force --deep --sign "$SIGN" "$APP"
 echo "Built $APP"
 echo "Launch the editor: open $APP"
