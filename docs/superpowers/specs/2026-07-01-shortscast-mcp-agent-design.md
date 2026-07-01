@@ -36,8 +36,15 @@ is an MCP server. The same server also works for Claude Code.
 
 New executable target **`shortscast-mcp`** added to `Package.swift`, depending on
 `ShortsCastCapture`, `ShortsCastRender`, `ShortsCastCore`, `ShortsCastEditor`
-(for `ProjectEdits`), plus the official **MCP Swift SDK**
-(`github.com/modelcontextprotocol/swift-sdk`) over **stdio** transport.
+(for `ProjectEdits`). **No external dependency:** the MCP protocol is hand-rolled.
+
+**Why not the official MCP Swift SDK:** it requires macOS 13 / Swift 6.1, which
+would raise the whole package floor from macOS 12 and would not run on the
+target Monterey machine. MCP's stdio transport is just newline-delimited
+JSON-RPC 2.0, and a tools-only server needs only three request methods
+(`initialize`, `tools/list`, `tools/call`) plus the `notifications/initialized`
+ack — ~150 lines we own, keeping the package on macOS 12 / Swift 5.7 with zero
+dependencies. Logs go to **stderr** (stdout is reserved for JSON-RPC frames).
 
 Core state lives in a single `RecordingSessionStore` (a Swift `actor`):
 
@@ -203,8 +210,9 @@ low-risk; de-risk this first before building the full tool surface.
 
 ## Distribution & client config
 
-- Build + sign `shortscast-mcp`, install to the fixed path. Extend
-  `Scripts/make-app.sh` / `Scripts/release.sh` to build and sign the helper.
+- Build + sign `shortscast-mcp` (macOS 12 / Swift 5.7, no external deps), install
+  to the fixed path. Extend `Scripts/make-app.sh` / `Scripts/release.sh` to build
+  and sign the helper.
 - **Claude Desktop** — `claude_desktop_config.json`:
   ```json
   { "mcpServers": { "shortscast": { "command": "/Users/<you>/Applications/ShortsCast/shortscast-mcp" } } }
