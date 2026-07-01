@@ -8,6 +8,13 @@ struct InspectorView: View {
     @ObservedObject var model: EditorModel
 
     var body: some View {
+        ScrollView {
+            inspectorForm
+        }
+        .frame(width: 276)
+    }
+
+    private var inspectorForm: some View {
         Form {
             Section("Format") {
                 Picker("Aspect", selection: Binding(
@@ -65,8 +72,8 @@ struct InspectorView: View {
                 }
             }
         }
-        .frame(width: 260)
         .padding(8)
+        .frame(width: 260)
     }
 
     private var isGradient: Bool { if case .gradient = model.style.background { return true }; return false }
