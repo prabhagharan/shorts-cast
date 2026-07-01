@@ -42,6 +42,8 @@ struct InspectorView: View {
             Section("Auto-zoom") {
                 zoomSlider("Default ×", \.defaultZoom, 1...5)
                 zoomSlider("Max ×", \.maxZoom, 1...6)
+                Text("Default × is each segment's zoom; Max × caps how far it can go.")
+                    .font(.caption).foregroundColor(.secondary)
                 Text("Speed — seconds, lower = snappier").font(.caption).foregroundColor(.secondary)
                 durationSlider("Zoom-in", \.zoomInDuration, 0.1...1.5)
                 durationSlider("Zoom-out", \.zoomOutDuration, 0.1...1.5)
