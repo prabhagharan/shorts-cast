@@ -91,4 +91,16 @@ public struct Handlers {
             "target": .string(a.targetDesc)
         ]))
     }
+
+    public func listRecordings(_ args: JSONValue?) async -> ToolResult {
+        let items = await store.recent().map { e in
+            JSONValue.object([
+                "bundle_path": .string(e.bundleURL.path),
+                "created": .string(e.createdISO),
+                "duration": .number(e.duration),
+                "segment_count": .number(Double(e.segments.count))
+            ])
+        }
+        return ok(.object(["recordings": .array(items)]))
+    }
 }
