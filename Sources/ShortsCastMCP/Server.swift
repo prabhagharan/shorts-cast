@@ -60,27 +60,61 @@ public enum ShortsCastMCP {
 }
 
 public extension ShortsCastMCP {
-    static func allTools() -> [MCPTool] {
-        [ MCPTool(name: "ping", description: "Health check; returns pong.",
-                  inputSchema: .object(["type": .string("object"), "properties": .object([:])])) { _ in
-            ToolResult(text: "pong", isError: false) },
-        MCPTool(name: "capture_test",
-                description: "Spike: record 2s of the main display to a temp bundle.",
-                inputSchema: .object(["type": .string("object"), "properties": .object([:])])) { _ in
-            do {
-                Permissions.request()
-                let missing = Permissions.status().missingNames
-                guard missing.isEmpty else { return ToolResult(text: "Missing: \(missing)", isError: true) }
-                let target = try TargetResolver.resolve(displayIndex: nil, windowQuery: nil, region: nil)
-                let out = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("spike-\(UUID().uuidString).shortscast")
-                let iso = ISO8601DateFormatter().string(from: Date())
-                let r = try await Recorder.record(target: target, seconds: 2, outBundle: out,
-                                                  appVersion: ShortsCastCapture.version, createdISO: iso)
-                return ToolResult(text: "Wrote \(r.bundleURL.path), events=\(r.eventLog.events.count)", isError: false)
-            } catch {
-                return ToolResult(text: "capture failed: \(error)", isError: true)
-            }
-        } ]
+    static func allTools() -> [MCPTool] { allTools(handlers: Handlers(store: RecordingSessionStore())) }
+
+    static func allTools(handlers h: Handlers) -> [MCPTool] {
+        func obj(_ props: [String: JSONValue], required: [String] = []) -> JSONValue {
+            var o: [String: JSONValue] = ["type": .string("object"), "properties": .object(props)]
+            if !required.isEmpty { o["required"] = .array(required.map { .string($0) }) }
+            return .object(o)
+        }
+        let str = JSONValue.object(["type": .string("string")])
+        let num = JSONValue.object(["type": .string("number")])
+        let int = JSONValue.object(["type": .string("integer")])
+        let regionSchema = JSONValue.object([
+            "type": .string("object"),
+            "properties": .object(["x": num, "y": num, "w": num, "h": num])
+        ])
+        return [
+            MCPTool(name: "start_recording",
+                    description: "Start an open-ended screen recording. Target a window by app name (e.g. \"Google Chrome\"), a display index, or a screen region. One recording at a time.",
+                    inputSchema: obj(["target": str, "display": int, "region": regionSchema])) { await h.startRecording($0) },
+            MCPTool(name: "stop_recording",
+                    description: "Stop the active recording, finalize the .shortscast bundle, and auto-direct it.",
+                    inputSchema: obj(["session_id": str])) { await h.stopRecording($0) },
+            MCPTool(name: "recording_status",
+                    description: "Report whether a recording is active, its elapsed time and target.",
+                    inputSchema: obj([:])) { await h.recordingStatus($0) },
+            MCPTool(name: "list_recordings",
+                    description: "List recent recordings (bundle path, created time, duration, segment count).",
+                    inputSchema: obj([:])) { await h.listRecordings($0) },
+            MCPTool(name: "list_segments",
+                    description: "List a recording's auto-directed focus segments with an event-derived summary of each.",
+                    inputSchema: obj(["bundle": str])) { await h.listSegments($0) },
+            MCPTool(name: "set_segment_camera",
+                    description: "Override a segment's camera: zoom, center {x,y}, and ease in/out durations.",
+                    inputSchema: obj(["bundle": str, "index": int, "zoom": num,
+                                      "center": regionSchema, "zoom_in_duration": num, "zoom_out_duration": num],
+                                     required: ["index"])) { await h.setSegmentCamera($0) },
+            MCPTool(name: "set_director_settings",
+                    description: "Patch global auto-director settings (defaultZoom, zoomInDuration, restingAnchor, clusterTimeGap, …). Returns whether segments were re-cut.",
+                    inputSchema: obj(["bundle": str, "defaultZoom": num, "maxZoom": num, "restingZoom": num,
+                                      "zoomInDuration": num, "zoomOutDuration": num, "inactivityTimeout": num,
+                                      "clusterTimeGap": num, "clusterRadius": num, "dwellTime": num,
+                                      "dwellRadius": num, "dwellZoom": num, "denseEventCount": int,
+                                      "clickWeight": num, "keyWeight": num, "scrollWeight": num,
+                                      "zoomOutInPlace": .object(["type": .string("boolean")])])) { await h.setDirectorSettings($0) },
+            MCPTool(name: "set_style",
+                    description: "Patch render style (paddingFraction, cornerRadius, shadowOpacity, cursorRadius, …).",
+                    inputSchema: obj(["bundle": str, "paddingFraction": num, "cornerRadius": num,
+                                      "shadowOpacity": num, "shadowBlur": num, "shadowOffsetY": num,
+                                      "cursorRadius": num, "rippleDuration": num, "rippleMaxRadius": num])) { await h.setStyle($0) },
+            MCPTool(name: "export_recording",
+                    description: "Export a finished mp4 for a recording, honoring its saved camera/settings/style. Defaults to vertical 9:16.",
+                    inputSchema: obj(["bundle": str, "format": str])) { await h.exportRecording($0) },
+            MCPTool(name: "open_in_app",
+                    description: "Open a recording in the ShortsCast editor app for manual review.",
+                    inputSchema: obj(["bundle": str])) { await h.openInApp($0) }
+        ]
     }
 }

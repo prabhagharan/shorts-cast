@@ -24,6 +24,8 @@ final class StdioTransport: LineTransport {
     }
 }
 
-// Registered tools are wired in later tasks via ShortsCastMCP.allTools().
+// One shared store/handlers for the process so a recording spans multiple tool calls.
+let store = RecordingSessionStore()
+let handlers = Handlers(store: store)
 let transport = StdioTransport()
-await ShortsCastMCP.serve(tools: ShortsCastMCP.allTools(), transport: transport)
+await ShortsCastMCP.serve(tools: ShortsCastMCP.allTools(handlers: handlers), transport: transport)

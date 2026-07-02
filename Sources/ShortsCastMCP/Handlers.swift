@@ -15,6 +15,7 @@ public struct Handlers {
     let resolveTarget: (StartArgs) throws -> ResolvedTarget
     let makeSession: (ResolvedTarget, URL) -> CaptureSessionProtocol
     let export: (URL, [OutputFormat], RenderStyle, AutoDirectorSettings, URL, [SegmentOverride]) throws -> [URL]
+    let launch: (URL) -> Bool
 
     public init(store: RecordingSessionStore,
                 outputDir: URL = SessionPaths.outputDir,
@@ -32,11 +33,12 @@ public struct Handlers {
                 export: @escaping (URL, [OutputFormat], RenderStyle, AutoDirectorSettings, URL, [SegmentOverride]) throws -> [URL] = { url, formats, style, settings, outDir, overrides in
                     try ExportJob.run(bundleURL: url, formats: formats, style: style,
                                       settings: settings, outDir: outDir, overrides: overrides)
-                }) {
+                },
+                launch: @escaping (URL) -> Bool = { AppLauncher.open(bundle: $0) }) {
         self.store = store; self.outputDir = outputDir
         self.requestPermissions = requestPermissions; self.permissionMissing = permissionMissing
         self.resolveTarget = resolveTarget; self.makeSession = makeSession
-        self.export = export
+        self.export = export; self.launch = launch
     }
 
     private func ok(_ v: JSONValue) -> ToolResult {
@@ -230,5 +232,16 @@ public struct Handlers {
         } catch RecordingSessionStore.StoreError.notFound {
             return err("No such recording.")
         } catch { return err("Export failed: \(error)") }
+    }
+
+    public func openInApp(_ args: JSONValue?) async -> ToolResult {
+        do {
+            let entry = try await store.entry(for: bundleURL(from: args))
+            let didOpen = launch(entry.bundleURL)
+            guard didOpen else { return err("Could not open \(entry.bundleURL.path) in the app.") }
+            return ok(.object(["opened": .string(entry.bundleURL.path)]))
+        } catch RecordingSessionStore.StoreError.notFound {
+            return err("No such recording.")
+        } catch { return err("Open failed: \(error)") }
     }
 }
