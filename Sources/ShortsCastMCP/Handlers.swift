@@ -14,6 +14,7 @@ public struct Handlers {
     let permissionMissing: () -> [String]
     let resolveTarget: (StartArgs) throws -> ResolvedTarget
     let makeSession: (ResolvedTarget, URL) -> CaptureSessionProtocol
+    let export: (URL, [OutputFormat], RenderStyle, AutoDirectorSettings, URL, [SegmentOverride]) throws -> [URL]
 
     public init(store: RecordingSessionStore,
                 outputDir: URL = SessionPaths.outputDir,
@@ -27,10 +28,15 @@ public struct Handlers {
                     RecordingController(target: target, outBundle: url,
                                         appVersion: ShortsCastCapture.version,
                                         createdISO: ISO8601DateFormatter().string(from: Date()))
+                },
+                export: @escaping (URL, [OutputFormat], RenderStyle, AutoDirectorSettings, URL, [SegmentOverride]) throws -> [URL] = { url, formats, style, settings, outDir, overrides in
+                    try ExportJob.run(bundleURL: url, formats: formats, style: style,
+                                      settings: settings, outDir: outDir, overrides: overrides)
                 }) {
         self.store = store; self.outputDir = outputDir
         self.requestPermissions = requestPermissions; self.permissionMissing = permissionMissing
         self.resolveTarget = resolveTarget; self.makeSession = makeSession
+        self.export = export
     }
 
     private func ok(_ v: JSONValue) -> ToolResult {
@@ -208,5 +214,21 @@ public struct Handlers {
         } catch RecordingSessionStore.StoreError.notFound {
             return err("No such recording.")
         } catch { return err("Could not set style: \(error)") }
+    }
+
+    public func exportRecording(_ args: JSONValue?) async -> ToolResult {
+        do {
+            let entry = try await store.entry(for: bundleURL(from: args))
+            let formatName = args?["format"]?.stringValue ?? OutputFormat.vertical9x16.name
+            guard let format = OutputFormat.all.first(where: { $0.name == formatName }) else {
+                return err("Unknown format '\(formatName)'. Valid: \(OutputFormat.all.map { $0.name }.joined(separator: ", "))")
+            }
+            let edits = EditsStore.read(entry.bundleURL)
+            let outDir = entry.bundleURL.deletingLastPathComponent()
+            let urls = try export(entry.bundleURL, [format], edits.style, edits.settings, outDir, edits.overrides)
+            return ok(.object(["mp4_paths": .array(urls.map { .string($0.path) })]))
+        } catch RecordingSessionStore.StoreError.notFound {
+            return err("No such recording.")
+        } catch { return err("Export failed: \(error)") }
     }
 }
