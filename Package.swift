@@ -11,7 +11,8 @@ let package = Package(
         .library(name: "ShortsCastEditor", targets: ["ShortsCastEditor"]),
         .executable(name: "shortscast-rec", targets: ["shortscast-rec"]),
         .executable(name: "shortscast-export", targets: ["shortscast-export"]),
-        .executable(name: "shortscast-app", targets: ["shortscast-app"])
+        .executable(name: "shortscast-app", targets: ["shortscast-app"]),
+        .executable(name: "shortscast-mcp", targets: ["shortscast-mcp"]),
     ],
     targets: [
         .target(name: "ShortsCastCore"),
@@ -24,6 +25,10 @@ let package = Package(
         .testTarget(name: "ShortsCastEditorTests", dependencies: ["ShortsCastEditor"]),
         .executableTarget(name: "shortscast-rec", dependencies: ["ShortsCastCapture", "ShortsCastCore"]),
         .executableTarget(name: "shortscast-export", dependencies: ["ShortsCastRender", "ShortsCastCore", "ShortsCastCapture"]),
-        .executableTarget(name: "shortscast-app", dependencies: ["ShortsCastEditor", "ShortsCastCore", "ShortsCastCapture", "ShortsCastRender"])
+        .executableTarget(name: "shortscast-app", dependencies: ["ShortsCastEditor", "ShortsCastCore", "ShortsCastCapture", "ShortsCastRender"]),
+        .target(name: "ShortsCastMCP",
+                dependencies: ["ShortsCastCore", "ShortsCastCapture", "ShortsCastRender", "ShortsCastEditor"]),
+        .testTarget(name: "ShortsCastMCPTests", dependencies: ["ShortsCastMCP"]),
+        .executableTarget(name: "shortscast-mcp", dependencies: ["ShortsCastMCP"]),
     ]
 )

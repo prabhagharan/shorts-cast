@@ -19,20 +19,24 @@ command -v gh >/dev/null 2>&1 || { echo "error: GitHub CLI 'gh' not found (brew 
 echo "==> Building universal app for $VERSION"
 SHORTSCAST_VERSION="$VERSION" SHORTSCAST_SIGN_ID="-" ./Scripts/make-app.sh
 
-# 2. Stage under the clean user-facing name and re-sign the renamed bundle.
+# 2. Stage under clean user-facing names and re-sign the renamed bundles.
+#    Ship the GUI editor and the MCP agent server side by side.
 STAGE="$(mktemp -d)"; trap 'rm -rf "$STAGE"' EXIT
 cp -R "$ROOT/.build/ShortsCastApp.app" "$STAGE/ShortsCast.app"
 codesign --force --deep --sign - "$STAGE/ShortsCast.app"
+cp -R "$ROOT/.build/ShortsCastMCP.app" "$STAGE/ShortsCastMCP.app"
+codesign --force --deep --sign - "$STAGE/ShortsCastMCP.app"
 
-# 3. Zip signature-safely (ditto, NOT zip).
+# 3. Zip signature-safely (ditto, NOT zip). Both apps sit at the zip root.
 rm -f "$ZIP"
-ditto -c -k --keepParent "$STAGE/ShortsCast.app" "$ZIP"
+ditto -c -k "$STAGE" "$ZIP"
 echo "==> Wrote $ZIP"
 
 # 4. Verify the artifact round-trips (unzip -> codesign must still pass).
 VERIFY="$(mktemp -d)"
 ditto -x -k "$ZIP" "$VERIFY"
 codesign --verify --deep --strict --verbose=2 "$VERIFY/ShortsCast.app"
+codesign --verify --deep --strict --verbose=2 "$VERIFY/ShortsCastMCP.app"
 echo "==> Gatekeeper verdict (expected: rejected / unnotarized):"
 spctl -a -vv "$VERIFY/ShortsCast.app" || true
 rm -rf "$VERIFY"
