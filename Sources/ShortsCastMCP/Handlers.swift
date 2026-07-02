@@ -133,4 +133,27 @@ public struct Handlers {
             return err("No such recording. Record something first, or pass a valid bundle path.")
         } catch { return err("Could not read segments: \(error)") }
     }
+
+    public func setSegmentCamera(_ args: JSONValue?) async -> ToolResult {
+        guard let index = args?["index"]?.intValue else { return err("`index` is required.") }
+        do {
+            let entry = try await store.entry(for: bundleURL(from: args))
+            var edits = entry.edits
+            let zoom = args?["zoom"]?.doubleValue.map { CGFloat($0) }
+            let center: CGPoint? = {
+                guard let c = args?["center"], let x = c["x"]?.doubleValue, let y = c["y"]?.doubleValue else { return nil }
+                return CGPoint(x: x, y: y)
+            }()
+            let zin = args?["zoom_in_duration"]?.doubleValue
+            let zout = args?["zoom_out_duration"]?.doubleValue
+            edits.overrides = upsertOverride(edits.overrides, index: index,
+                                             zoom: zoom, center: center,
+                                             zoomInDuration: zin, zoomOutDuration: zout)
+            try EditsStore.write(edits, to: entry.bundleURL)
+            try await store.update(bundle: entry.bundleURL) { $0.edits = edits }
+            return ok(.object(["index": .number(Double(index)), "saved": .bool(true)]))
+        } catch RecordingSessionStore.StoreError.notFound {
+            return err("No such recording.")
+        } catch { return err("Could not set segment camera: \(error)") }
+    }
 }
