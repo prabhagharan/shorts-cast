@@ -156,4 +156,57 @@ public struct Handlers {
             return err("No such recording.")
         } catch { return err("Could not set segment camera: \(error)") }
     }
+
+    public func setDirectorSettings(_ args: JSONValue?) async -> ToolResult {
+        guard let patch = args, SettingsPatch.keys(args).contains(where: { $0 != "bundle" }) else {
+            return err("Provide at least one AutoDirectorSettings field to patch.")
+        }
+        do {
+            let entry = try await store.entry(for: bundleURL(from: args))
+            var edits = entry.edits
+            edits.settings = try SettingsPatch.apply(patch, to: edits.settings)
+            try EditsStore.write(edits, to: entry.bundleURL)
+
+            let patchedKeys = SettingsPatch.keys(args).filter { $0 != "bundle" }
+            let resegmented = SettingsPatch.isResegmenting(patchedKeys)
+            let oldCount = entry.segments.count
+
+            if resegmented {
+                let (log, _, _) = try ProjectBundle.read(entry.bundleURL)
+                let dr = Director(settings: edits.settings).direct(log: log, overrides: [])
+                try await store.update(bundle: entry.bundleURL) { $0.edits = edits; $0.segments = dr.segments }
+                let segs = dr.segments.enumerated().map { i, seg in
+                    segmentJSON(seg, index: i, summary: SegmentSummary.describe(segment: seg, in: log))
+                }
+                return ok(.object([
+                    "segments_changed": .bool(true),
+                    "old_segment_count": .number(Double(oldCount)),
+                    "new_segment_count": .number(Double(dr.segments.count)),
+                    "segments": .array(segs)
+                ]))
+            } else {
+                try await store.update(bundle: entry.bundleURL) { $0.edits = edits }
+                return ok(.object(["segments_changed": .bool(false),
+                                   "new_segment_count": .number(Double(oldCount))]))
+            }
+        } catch RecordingSessionStore.StoreError.notFound {
+            return err("No such recording.")
+        } catch { return err("Could not set director settings: \(error)") }
+    }
+
+    public func setStyle(_ args: JSONValue?) async -> ToolResult {
+        guard let patch = args, SettingsPatch.keys(args).contains(where: { $0 != "bundle" }) else {
+            return err("Provide at least one RenderStyle field to patch.")
+        }
+        do {
+            let entry = try await store.entry(for: bundleURL(from: args))
+            var edits = entry.edits
+            edits.style = try SettingsPatch.apply(patch, to: edits.style)
+            try EditsStore.write(edits, to: entry.bundleURL)
+            try await store.update(bundle: entry.bundleURL) { $0.edits = edits }
+            return ok(.object(["saved": .bool(true)]))
+        } catch RecordingSessionStore.StoreError.notFound {
+            return err("No such recording.")
+        } catch { return err("Could not set style: \(error)") }
+    }
 }
