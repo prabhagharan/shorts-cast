@@ -100,14 +100,34 @@ public struct Handlers {
         ]))
     }
 
+    private func recordingJSON(_ e: RecordingSessionStore.Entry) -> JSONValue {
+        .object([
+            "bundle_path": .string(e.bundleURL.path),
+            "created": .string(e.createdISO),
+            "duration": .number(e.duration),
+            "segment_count": .number(Double(e.segments.count))
+        ])
+    }
+
     public func listRecordings(_ args: JSONValue?) async -> ToolResult {
-        let items = await store.recent().map { e in
-            JSONValue.object([
-                "bundle_path": .string(e.bundleURL.path),
-                "created": .string(e.createdISO),
-                "duration": .number(e.duration),
-                "segment_count": .number(Double(e.segments.count))
-            ])
+        var seen = Set<String>()
+        var items: [JSONValue] = []
+        // In-memory entries first (most recent first).
+        for e in await store.recent() where seen.insert(e.bundleURL.standardizedFileURL.path).inserted {
+            items.append(recordingJSON(e))
+        }
+        // Disk scan of the output dir for bundles from earlier sessions. Timestamped names
+        // sort newest-first lexicographically. entry(for:) reconstructs + caches each.
+        let fm = FileManager.default
+        if let contents = try? fm.contentsOfDirectory(at: outputDir, includingPropertiesForKeys: nil) {
+            let bundles = contents.filter { $0.pathExtension == "shortscast" }
+                .sorted { $0.lastPathComponent > $1.lastPathComponent }
+            for b in bundles where !seen.contains(b.standardizedFileURL.path) {
+                if let e = try? await store.entry(for: b) {
+                    seen.insert(b.standardizedFileURL.path)
+                    items.append(recordingJSON(e))
+                }
+            }
         }
         return ok(.object(["recordings": .array(items)]))
     }
@@ -146,6 +166,9 @@ public struct Handlers {
         guard let index = args?["index"]?.intValue else { return err("`index` is required.") }
         do {
             let entry = try await store.entry(for: bundleURL(from: args))
+            guard index >= 0 && index < entry.segments.count else {
+                return err("Segment index \(index) out of range (0..<\(entry.segments.count)).")
+            }
             var edits = entry.edits
             let zoom = args?["zoom"]?.doubleValue.map { CGFloat($0) }
             let center: CGPoint? = {
