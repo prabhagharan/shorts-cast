@@ -103,4 +103,34 @@ public struct Handlers {
         }
         return ok(.object(["recordings": .array(items)]))
     }
+
+    func segmentJSON(_ seg: FocusSegment, index: Int, summary: String) -> JSONValue {
+        .object([
+            "index": .number(Double(index)),
+            "start": .number(seg.start),
+            "end": .number(seg.end),
+            "zoom": .number(Double(seg.zoom)),
+            "center": .object(["x": .number(Double(seg.center.x)), "y": .number(Double(seg.center.y))]),
+            "zoom_in_duration": seg.zoomInDuration.map { JSONValue.number($0) } ?? .null,
+            "zoom_out_duration": seg.zoomOutDuration.map { JSONValue.number($0) } ?? .null,
+            "summary": .string(summary)
+        ])
+    }
+
+    func bundleURL(from args: JSONValue?) -> URL? {
+        args?["bundle"]?.stringValue.map { URL(fileURLWithPath: $0) }
+    }
+
+    public func listSegments(_ args: JSONValue?) async -> ToolResult {
+        do {
+            let entry = try await store.entry(for: bundleURL(from: args))
+            let (log, _, _) = try ProjectBundle.read(entry.bundleURL)
+            let segs = entry.segments.enumerated().map { i, seg in
+                segmentJSON(seg, index: i, summary: SegmentSummary.describe(segment: seg, in: log))
+            }
+            return ok(.object(["bundle_path": .string(entry.bundleURL.path), "segments": .array(segs)]))
+        } catch RecordingSessionStore.StoreError.notFound {
+            return err("No such recording. Record something first, or pass a valid bundle path.")
+        } catch { return err("Could not read segments: \(error)") }
+    }
 }
