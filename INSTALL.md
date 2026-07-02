@@ -38,3 +38,38 @@ Instead of steps 3–4 you can clear the download flag directly:
     xattr -dr com.apple.quarantine /Applications/ShortsCast.app
 
 Then open the app normally.
+
+## Agent (MCP) setup
+
+ShortsCast ships an MCP server, `ShortsCastMCP.app`, so Claude Desktop or Claude
+Code can record for you — start a recording, do a task in Chrome, stop, tune the
+camera, and export a finished short, all through tool calls. It must run as the
+signed app bundle so macOS grants it screen capture.
+
+1. Build/sign the bundle from source: `./Scripts/make-app.sh` → produces
+   `.build/ShortsCastMCP.app` (release zips include it at the zip root). Move it
+   somewhere stable, e.g. `~/Applications/ShortsCast/ShortsCastMCP.app`.
+2. Grant it **Screen Recording**, **Accessibility**, and **Input Monitoring**
+   (System Settings → Privacy & Security → add `ShortsCastMCP.app` to each list).
+   Launch it once first so it registers: `ShortsCastMCP.app/Contents/MacOS/shortscast-mcp </dev/null`.
+3. Register the *inner* executable with your client (not the `.app` — the inner
+   Mach-O, so it inherits the bundle's screen-recording grant):
+
+   **Claude Desktop** — `~/Library/Application Support/Claude/claude_desktop_config.json`:
+   ```json
+   {
+     "mcpServers": {
+       "shortscast": {
+         "command": "/Users/<you>/Applications/ShortsCast/ShortsCastMCP.app/Contents/MacOS/shortscast-mcp"
+       }
+     }
+   }
+   ```
+
+   **Claude Code**:
+   ```
+   claude mcp add shortscast /Users/<you>/Applications/ShortsCast/ShortsCastMCP.app/Contents/MacOS/shortscast-mcp
+   ```
+
+4. Restart the client. Ask the agent to "start a recording of Google Chrome", do
+   your task, then "stop and export". Files land in `~/Movies/ShortsCast/`.
