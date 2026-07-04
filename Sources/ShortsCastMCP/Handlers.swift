@@ -16,6 +16,8 @@ public struct Handlers {
     let makeSession: (ResolvedTarget, URL) -> CaptureSessionProtocol
     let export: (URL, [OutputFormat], RenderStyle, AutoDirectorSettings, URL, [SegmentOverride]) throws -> [URL]
     let launch: (URL) -> Bool
+    let listDisplaysProvider: () -> [DisplayOption]
+    let listWindowsProvider: () -> [WindowOption]
 
     public init(store: RecordingSessionStore,
                 outputDir: URL = SessionPaths.outputDir,
@@ -25,6 +27,8 @@ public struct Handlers {
                     try TargetResolver.resolve(displayIndex: a.displayIndex,
                                                windowQuery: a.windowQuery, region: a.region)
                 },
+                listDisplaysProvider: @escaping () -> [DisplayOption] = { TargetResolver.displays() },
+                listWindowsProvider: @escaping () -> [WindowOption] = { TargetResolver.windows() },
                 makeSession: @escaping (ResolvedTarget, URL) -> CaptureSessionProtocol = { target, url in
                     RecordingController(target: target, outBundle: url,
                                         appVersion: ShortsCastCapture.version,
@@ -39,6 +43,8 @@ public struct Handlers {
         self.requestPermissions = requestPermissions; self.permissionMissing = permissionMissing
         self.resolveTarget = resolveTarget; self.makeSession = makeSession
         self.export = export; self.launch = launch
+        self.listDisplaysProvider = listDisplaysProvider
+        self.listWindowsProvider = listWindowsProvider
     }
 
     private func ok(_ v: JSONValue) -> ToolResult {
@@ -71,6 +77,32 @@ public struct Handlers {
                 "bundle_path": .string(bundleURL.path)
             ]))
         } catch { return err("Could not start recording: \(error)") }
+    }
+
+    public func listDisplays(_ args: JSONValue?) async -> ToolResult {
+        let items = listDisplaysProvider().map { d in
+            JSONValue.object([
+                "index": .number(Double(d.index)),
+                "width": .number(Double(d.pixelWidth)),
+                "height": .number(Double(d.pixelHeight)),
+                "is_main": .bool(d.isMain),
+                "label": .string(d.label)
+            ])
+        }
+        return ok(.object(["displays": .array(items)]))
+    }
+
+    public func listWindows(_ args: JSONValue?) async -> ToolResult {
+        let items = listWindowsProvider().map { w in
+            JSONValue.object([
+                "app": .string(w.appName),
+                "title": .string(w.title),
+                // windowNumber as a string is an exact `target` for start_recording.
+                "target": .string(String(w.windowNumber)),
+                "label": .string(w.label)
+            ])
+        }
+        return ok(.object(["windows": .array(items)]))
     }
 
     public func stopRecording(_ args: JSONValue?) async -> ToolResult {
